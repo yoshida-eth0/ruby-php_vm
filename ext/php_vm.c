@@ -16,7 +16,7 @@ VALUE rb_ePHPSyntaxError;
 
 // PHP
 
-void php_eval_stringl(char *code, int code_len TSRMLS_DC)
+void php_eval_string(char *code, int code_len TSRMLS_DC)
 {
 	int syntax_error = 0;
 
@@ -29,15 +29,15 @@ void php_eval_stringl(char *code, int code_len TSRMLS_DC)
 
 	// syntax error
 	if (syntax_error) {
-		VALUE v_exception = rb_exc_new2(rb_ePHPSyntaxError, "Syntax error");
-		rb_exc_raise(v_exception);
+		VALUE exception = rb_exc_new2(rb_ePHPSyntaxError, "Syntax error");
+		rb_exc_raise(exception);
 	}
 
 	// exception
 	if (EG(exception)) {
-		VALUE v_exception = zval_to_value(EG(exception));
+		VALUE exception = zval_to_value(EG(exception));
 		EG(exception) = NULL;
-		rb_exc_raise(v_exception);
+		rb_exc_raise(exception);
 	}
 
 	// exit
@@ -48,14 +48,9 @@ void php_eval_stringl(char *code, int code_len TSRMLS_DC)
 		char message[32];
 		sprintf(message, "exit status error: %d", exit_status);
 
-		VALUE v_exception = rb_exc_new2(rb_ePHPError, message);
-		rb_exc_raise(v_exception);
+		VALUE exception = rb_exc_new2(rb_ePHPError, message);
+		rb_exc_raise(exception);
 	}
-}
-
-void php_eval_string(char *code TSRMLS_DC)
-{
-	php_eval_stringl(code, strlen(code) TSRMLS_CC);
 }
 
 void find_zend_class_entry(char *name, int name_len, zend_class_entry ***ce)
@@ -395,7 +390,7 @@ VALUE rb_php_vm_require(VALUE cls, VALUE filepath)
 	code = rb_str_plus(code, filepath);
 	code = rb_str_plus(code, rb_str_new2("\";"));
 
-	php_eval_string(RSTRING_PTR(code));
+	php_eval_string(RSTRING_PTR(code), RSTRING_LEN(code));
 
 	return Qnil;
 }
@@ -410,14 +405,14 @@ VALUE rb_php_vm_require_once(VALUE cls, VALUE filepath)
 	code = rb_str_plus(code, filepath);
 	code = rb_str_plus(code, rb_str_new2("\";"));
 
-	php_eval_string(RSTRING_PTR(code));
+	php_eval_string(RSTRING_PTR(code), RSTRING_LEN(code));
 
 	return Qnil;
 }
 
-VALUE rb_php_vm_exec(VALUE cls, VALUE v_code)
+VALUE rb_php_vm_exec(VALUE cls, VALUE code)
 {
-	php_eval_stringl(RSTRING_PTR(v_code), RSTRING_LEN(v_code) TSRMLS_CC);
+	php_eval_string(RSTRING_PTR(code), RSTRING_LEN(code) TSRMLS_CC);
 	return Qnil;
 }
 

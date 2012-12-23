@@ -21,8 +21,7 @@ typedef struct {
 
 
 // PHP
-extern void php_eval_stringl(char *code, int code_len TSRMLS_DC);
-extern void php_eval_string(char *code TSRMLS_DC);
+extern void php_eval_string(char *code, int code_len TSRMLS_DC);
 extern void find_zend_class_entry(char *name, int name_len, zend_class_entry ***ce);
 extern void find_zend_class_entry2(char *name, zend_class_entry ***ce);
 extern int is_exception_zend_class_entry(zend_class_entry *ce TSRMLS_DC);
