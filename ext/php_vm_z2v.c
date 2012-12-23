@@ -94,12 +94,12 @@ static VALUE zval_to_value_object(zval *z)
 
 		obj = rb_exc_new2(rb_ePHPExceptionObject, Z_STRVAL_P(z_message));
 
-		rb_iv_set(obj, "class", class);
+		rb_iv_set(obj, "php_class", class);
 	} else {
 		// normal object
 		obj = rb_obj_alloc(rb_cPHPObject);
 
-		rb_iv_set(obj, "class", class);
+		rb_iv_set(obj, "php_class", class);
 	}
 
 	// resource

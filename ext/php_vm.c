@@ -26,7 +26,7 @@ void php_eval_stringl(char *code, int code_len TSRMLS_DC)
 			syntax_error = 1;
 		}
 	} zend_end_try();
-	
+
 	// syntax error
 	if (syntax_error) {
 		VALUE v_exception = rb_exc_new2(rb_ePHPSyntaxError, "Syntax error");
@@ -37,6 +37,18 @@ void php_eval_stringl(char *code, int code_len TSRMLS_DC)
 	if (EG(exception)) {
 		VALUE v_exception = zval_to_value(EG(exception));
 		EG(exception) = NULL;
+		rb_exc_raise(v_exception);
+	}
+
+	// exit
+	if (EG(exit_status)!=0) {
+		int exit_status = EG(exit_status);
+		EG(exit_status) = 0;
+
+		char message[32];
+		sprintf(message, "exit status error: %d", exit_status);
+
+		VALUE v_exception = rb_exc_new2(rb_ePHPError, message);
 		rb_exc_raise(v_exception);
 	}
 }
@@ -373,21 +385,39 @@ zval* get_zval(VALUE self)
 
 // module PHPVM
 
-VALUE rb_php_vm_require(VALUE cls, VALUE v_filepath)
+VALUE rb_php_vm_require(VALUE cls, VALUE filepath)
 {
-	StringValue(v_filepath);
-	char *code = malloc(20+RSTRING_LEN(v_filepath));
-	sprintf(code, "require_once \"%s\";", RSTRING_PTR(v_filepath));
-	php_eval_string(code);
-	free(code);
+	StringValue(filepath);
+	filepath = rb_funcall(filepath, rb_intern("gsub"), 2, rb_str_new2("\\"), rb_str_new2("\\\\"));
+	filepath = rb_funcall(filepath, rb_intern("gsub"), 2, rb_str_new2("\""), rb_str_new2("\\\""));
+
+	VALUE code = rb_str_new2("require \"");
+	code = rb_str_plus(code, filepath);
+	code = rb_str_plus(code, rb_str_new2("\";"));
+
+	php_eval_string(RSTRING_PTR(code));
+
+	return Qnil;
+}
+
+VALUE rb_php_vm_require_once(VALUE cls, VALUE filepath)
+{
+	StringValue(filepath);
+	filepath = rb_funcall(filepath, rb_intern("gsub"), 2, rb_str_new2("\\"), rb_str_new2("\\\\"));
+	filepath = rb_funcall(filepath, rb_intern("gsub"), 2, rb_str_new2("\""), rb_str_new2("\\\""));
+
+	VALUE code = rb_str_new2("require_once \"");
+	code = rb_str_plus(code, filepath);
+	code = rb_str_plus(code, rb_str_new2("\";"));
+
+	php_eval_string(RSTRING_PTR(code));
+
 	return Qnil;
 }
 
 VALUE rb_php_vm_exec(VALUE cls, VALUE v_code)
 {
-	char *code = RSTRING_PTR(v_code);
-	int code_len = RSTRING_LEN(v_code);
-	php_eval_stringl(code, code_len TSRMLS_CC);
+	php_eval_stringl(RSTRING_PTR(v_code), RSTRING_LEN(v_code) TSRMLS_CC);
 	return Qnil;
 }
 
@@ -553,6 +583,7 @@ void Init_php_vm()
 	rb_mPHPVM = rb_define_module("PHPVM");
 
 	rb_define_singleton_method(rb_mPHPVM, "require", rb_php_vm_require, 1);
+	rb_define_singleton_method(rb_mPHPVM, "require_once", rb_php_vm_require_once, 1);
 	rb_define_singleton_method(rb_mPHPVM, "exec", rb_php_vm_exec, 1);
 	rb_define_singleton_method(rb_mPHPVM, "getClass", rb_php_vm_getClass, 1);
 
