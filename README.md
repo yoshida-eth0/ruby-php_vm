@@ -5,7 +5,6 @@ php_vm is a native bridge between Ruby and PHP.
 
 Requirements
 ------
-* ruby >= 1.9
 * php (sapi/embed)
 
 
