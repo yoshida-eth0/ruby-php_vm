@@ -27,20 +27,20 @@ static int hash_flatten_yield(VALUE key, VALUE value, VALUE ary)
 static void value_to_zval_hash(VALUE v, zval *z)
 {
 	VALUE v_arr = rb_ary_new();
-	array_init(z);
-
 	rb_hash_foreach(v, hash_flatten_yield, v_arr);
+
+	array_init(z);
 
 	long i;
 	for (i=0; i<RARRAY_LEN(v_arr); i+=2) {
 		VALUE v_key = RARRAY_PTR(v_arr)[i];
-		StringValue(v_key);
+		v_key = rb_obj_as_string(v_key);
 
 		zval *z_value;
 		MAKE_STD_ZVAL(z_value);
 		value_to_zval(RARRAY_PTR(v_arr)[i+1], z_value);
 
-		add_assoc_zval_ex(z, RSTRING_PTR(v_key), RSTRING_LEN(v_key), z_value);
+		add_assoc_zval_ex(z, RSTRING_PTR(v_key), RSTRING_LEN(v_key)+1, z_value);
 	}
 }
 
@@ -79,10 +79,11 @@ void value_to_zval(VALUE v, zval *z)
 			VALUE cls = CLASS_OF(v);
 			if (cls==rb_cPHPObject || cls==rb_ePHPExceptionObject) {
 				// wrap php object
+				// TODO
 				z = get_zval(v);
 			} else {
 				// other to_s
-				StringValue(v);
+				v = rb_obj_as_string(v);
 				ZVAL_STRING(z, RSTRING_PTR(v), 1);
 			}
 		}
