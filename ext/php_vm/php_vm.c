@@ -347,8 +347,8 @@ VALUE rb_php_vm_require(VALUE cls, VALUE filepath)
 	filepath = rb_funcall(filepath, rb_intern("gsub"), 2, rb_str_new2("\""), rb_str_new2("\\\""));
 
 	VALUE code = rb_str_new2("require \"");
-	code = rb_str_plus(code, filepath);
-	code = rb_str_plus(code, rb_str_new2("\";"));
+	rb_str_cat(code, RSTRING_PTR(filepath), RSTRING_LEN(filepath));
+	rb_str_cat2(code, "\";");
 
 	php_eval_string(RSTRING_PTR(code), RSTRING_LEN(code));
 
@@ -362,8 +362,8 @@ VALUE rb_php_vm_require_once(VALUE cls, VALUE filepath)
 	filepath = rb_funcall(filepath, rb_intern("gsub"), 2, rb_str_new2("\""), rb_str_new2("\\\""));
 
 	VALUE code = rb_str_new2("require_once \"");
-	code = rb_str_plus(code, filepath);
-	code = rb_str_plus(code, rb_str_new2("\";"));
+	rb_str_cat(code, RSTRING_PTR(filepath), RSTRING_LEN(filepath));
+	rb_str_cat2(code, "\";");
 
 	php_eval_string(RSTRING_PTR(code), RSTRING_LEN(code));
 

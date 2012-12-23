@@ -10,29 +10,37 @@ static void value_to_zval_array(VALUE v, zval *z)
 	long i;
 	for (i=0; i<RARRAY_LEN(v); i++) {
 		zval *new_var;
-		MAKE_STD_ZVAL(z);
+		MAKE_STD_ZVAL(new_var);
 		value_to_zval(RARRAY_PTR(v)[i], new_var);
 
 		zend_hash_next_index_insert(Z_ARRVAL_P(z), &new_var, sizeof(zval *), NULL);
 	}
 }
 
+static int hash_flatten_yield(VALUE key, VALUE value, VALUE ary)
+{
+	rb_ary_push(ary, key);
+	rb_ary_push(ary, value);
+	return 0;
+}
+
 static void value_to_zval_hash(VALUE v, zval *z)
 {
+	VALUE v_arr = rb_ary_new();
 	array_init(z);
 
-	v = rb_funcall(v, rb_intern("flatten"), 0);
+	rb_hash_foreach(v, hash_flatten_yield, v_arr);
 
 	long i;
-	for (i=0; i<RARRAY_LEN(v); i+=2) {
-		VALUE v_key = RARRAY_PTR(v)[i];
+	for (i=0; i<RARRAY_LEN(v_arr); i+=2) {
+		VALUE v_key = RARRAY_PTR(v_arr)[i];
 		StringValue(v_key);
 
 		zval *z_value;
-		MAKE_STD_ZVAL(z);
-		value_to_zval(RARRAY_PTR(v)[i+1], z_value);
+		MAKE_STD_ZVAL(z_value);
+		value_to_zval(RARRAY_PTR(v_arr)[i+1], z_value);
 
-		add_assoc_zval_ex(z, RSTRING_PTR(v_key), RSTRING_LEN(v), z_value);
+		add_assoc_zval_ex(z, RSTRING_PTR(v_key), RSTRING_LEN(v_key), z_value);
 	}
 }
 
@@ -71,6 +79,7 @@ void value_to_zval(VALUE v, zval *z)
 			VALUE cls = CLASS_OF(v);
 			if (cls==rb_cPHPObject || cls==rb_ePHPExceptionObject) {
 				// wrap php object
+				z = get_zval(v);
 			} else {
 				// other to_s
 				StringValue(v);
