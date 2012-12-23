@@ -1,6 +1,7 @@
 #!/usr/bin/ruby
 
-require_relative File.expand_path(__FILE__+"/../../ext/php_vm")
+$LOAD_PATH << File.expand_path(__FILE__+"/../../ext/")
+require "php_vm"
 
 PHPVM.exec <<EOS
 class HelloClass
@@ -38,7 +39,7 @@ class HelloClass
 }
 EOS
 
-HelloClass = PHPVM::PHPClass.get("HelloClass")
+HelloClass = PHPVM::getClass("HelloClass")
 
 puts "[class]"
 puts HelloClass

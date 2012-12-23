@@ -1,5 +1,6 @@
 #!/usr/bin/ruby
 
-require_relative File.expand_path(__FILE__+"/../../ext/php_vm")
+$LOAD_PATH << File.expand_path(__FILE__+"/../../ext/")
+require "php_vm"
 
 PHPVM.require(File.expand_path(__FILE__+"/../require.php"))
