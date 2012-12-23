@@ -2,11 +2,16 @@ php_vm
 ======================
 php_vm is a native bridge between Ruby and PHP.
 
-Install
+
+Requirements
+------
+* ruby >= 1.9
+* php (sapi/embed)
+
+
+Installation
 ------
 	$ gem install php_vm
-
-PHP(sapi/embed) required.
 
 
 Install PHP (sapi/embed)
