@@ -538,7 +538,7 @@ void Init_php_vm()
 	rb_define_singleton_method(rb_mPHPVM, "exec", rb_php_vm_exec, 1);
 	rb_define_singleton_method(rb_mPHPVM, "getClass", rb_php_vm_getClass, 1);
 
-	rb_define_const(rb_mPHPVM, "VERSION", rb_str_new2("1.0.2"));
+	rb_define_const(rb_mPHPVM, "VERSION", rb_str_new2("1.0.3"));
 
 	// class PHPVM::PHPClass
 	rb_cPHPClass = rb_define_class_under(rb_mPHPVM, "PHPClass", rb_cObject);
