@@ -1,5 +1,4 @@
 # -*- encoding: utf-8 -*-
-require File.expand_path('../lib/php_vm/version', __FILE__)
 
 Gem::Specification.new do |gem|
   gem.authors       = ["Yoshida Tetsuya"]
@@ -13,6 +12,12 @@ Gem::Specification.new do |gem|
   gem.test_files    = gem.files.grep(%r{^(test|spec|features)/})
   gem.name          = "php_vm"
   gem.require_paths = ["lib"]
-  gem.extensions    = ["ext/extconf.rb"]
-  gem.version       = PHPVM::VERSION
+  gem.extensions    = ["ext/php_vm/extconf.rb"]
+  gem.version       = Proc.new {
+                        version = nil
+                        txt = open(File.expand_path("../ext/php_vm/php_vm.c", __FILE__)) {|f| f.read}
+                        m = txt.match(/rb_define_const\(rb_mPHPVM, "VERSION", rb_str_new2\("([^"]+)"\)\)/)
+                        version = m[1] if m
+                        version
+                      }.call
 end
