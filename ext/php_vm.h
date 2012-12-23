@@ -26,9 +26,9 @@ extern void find_zend_class_entry(char *name, int name_len, zend_class_entry ***
 extern void find_zend_class_entry2(char *name, zend_class_entry ***ce);
 extern int is_exception_zend_class_entry(zend_class_entry *ce TSRMLS_DC);
 extern int is_exception_zval(zval *z TSRMLS_DC);
-extern int new_php_object(zend_class_entry *ce, VALUE v_args, zval *return_value);
+extern int new_php_object(zend_class_entry *ce, VALUE v_args, zval *retval);
 extern void define_php_methods(VALUE v_obj, zend_class_entry *ce, int is_static);
-extern int call_php_method(zend_class_entry *ce, zval *obj, char *name, int name_len, int argc, zval **z_argv, zval **retval_ptr TSRMLS_DC);
+extern int call_php_method(zend_class_entry *ce, zval *obj, zend_function *mptr, int argc, VALUE *v_argv, zval **retval_ptr TSRMLS_DC);
 
 // Ruby
 extern VALUE get_callee_name();

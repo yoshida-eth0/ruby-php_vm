@@ -113,11 +113,8 @@ void find_zend_function(zend_class_entry *ce, char *name, int name_len, zend_fun
 	free(lcname);
 }
 
-int new_php_object(zend_class_entry *ce, VALUE v_args, zval *return_value)
+int new_php_object(zend_class_entry *ce, VALUE v_args, zval *retval)
 {
-	zval *retval_ptr = NULL;
-	zend_fcall_info fci;
-	zend_fcall_info_cache fcc;
 	int result = FAILURE;
 
 	if (ce->constructor) {
@@ -132,49 +129,11 @@ int new_php_object(zend_class_entry *ce, VALUE v_args, zval *return_value)
 		}
 */
 
-		// argv
-		zval ***z_argv = malloc(sizeof(zval **) * RARRAY_LEN(v_args));
-		long i;
-		for (i=0; i<RARRAY_LEN(v_args); i++) {
-			zval *tmp;
-			MAKE_STD_ZVAL(tmp);
-			value_to_zval(RARRAY_PTR(v_args)[i], tmp);
-			z_argv[i] = &tmp;
-		}
-
 		// alloc
-		object_init_ex(return_value, ce);
+		object_init_ex(retval, ce);
 
-		// call constructor
-		fci.size = sizeof(fci);
-		fci.function_table = EG(function_table);
-		fci.function_name = NULL;
-		fci.symbol_table = NULL;
-		fci.object_ptr = return_value;
-		fci.retval_ptr_ptr = &retval_ptr;
-		fci.param_count = RARRAY_LEN(v_args);
-		fci.params = z_argv;
-		fci.no_separation = 1;
-
-		fcc.initialized = 1;
-		fcc.function_handler = ce->constructor;
-		fcc.calling_scope = EG(scope);
-		fcc.called_scope = Z_OBJCE_P(return_value);
-		fcc.object_ptr = return_value;
-
-		zend_try {
-			result = zend_call_function(&fci, &fcc TSRMLS_CC);
-		} zend_catch {
-		} zend_end_try();
-
-		// release
-		if (retval_ptr) {
-			zval_ptr_dtor(&retval_ptr);
-		}
-		for (i=0; i<RARRAY_LEN(v_args); i++) {
-			zval_ptr_dtor(z_argv[i]);
-		}
-		free(z_argv);
+		// call
+		int result = call_php_method(ce, retval, ce->constructor, RARRAY_LEN(v_args), RARRAY_PTR(v_args), &retval TSRMLS_CC);
 
 		// error
 		if (result==FAILURE) {
@@ -187,7 +146,7 @@ int new_php_object(zend_class_entry *ce, VALUE v_args, zval *return_value)
 
 	} else if (!RARRAY_LEN(v_args)) {
 		// undefined constructor, hasnt args
-		object_init_ex(return_value, ce);
+		object_init_ex(retval, ce);
 		result = SUCCESS;
 
 	} else {
@@ -244,18 +203,25 @@ void define_php_methods(VALUE v_obj, zend_class_entry *ce, int is_static)
 	}
 }
 
-int call_php_method(zend_class_entry *ce, zval *obj, char *name, int name_len, int argc, zval **z_argv, zval **retval_ptr TSRMLS_DC)
+int call_php_method(zend_class_entry *ce, zval *obj, zend_function *mptr, int argc, VALUE *v_argv, zval **retval_ptr TSRMLS_DC)
 {
 	int result = FAILURE;
+
+	// argv
+	zval ***z_argv = malloc(sizeof(zval **) * argc);
+	long i;
+	for (i=0; i<argc; i++) {
+		zval *tmp;
+		MAKE_STD_ZVAL(tmp);
+		value_to_zval(v_argv[i], tmp);
+		z_argv[i] = &tmp;
+	}
 
 	// call info
 	zend_fcall_info fci;
 	zend_fcall_info_cache fcc;
 	zval *return_value;
 	ALLOC_INIT_ZVAL(return_value);
-
-	zend_function *mptr;
-	find_zend_function(ce, name, name_len, &mptr);
 
 	fci.size = sizeof(fci);
 	fci.function_table = NULL;
@@ -264,7 +230,7 @@ int call_php_method(zend_class_entry *ce, zval *obj, char *name, int name_len, i
 	fci.object_ptr = obj;
 	fci.retval_ptr_ptr = retval_ptr;
 	fci.param_count = argc;
-	fci.params = &z_argv;
+	fci.params = z_argv;
 	fci.no_separation = 1;
 
 	fcc.initialized = 1;
@@ -279,6 +245,12 @@ int call_php_method(zend_class_entry *ce, zval *obj, char *name, int name_len, i
 	} zend_catch {
 		//printf("call_php_method exception: %p\n", EG(exception));
 	} zend_end_try();
+
+	// release
+	for (i=0; i<argc; i++) {
+		zval_ptr_dtor(z_argv[i]);
+	}
+	free(z_argv);
 
 	return result;
 }
@@ -302,7 +274,7 @@ VALUE get_callee_name()
 	return Qnil;
 }
 
-VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, VALUE callee, int argc, VALUE *v_argv)
+VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, VALUE callee, int argc, VALUE *argv)
 {
 	// callee
 	if (callee==Qnil) {
@@ -310,25 +282,13 @@ VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, VALUE callee, int 
 		rb_exc_raise(exception);
 	}
 
-	// argv
-	zval ***z_argv = malloc(sizeof(zval **) * argc);
-	long i;
-	for (i=0; i<argc; i++) {
-		zval *tmp;
-		MAKE_STD_ZVAL(tmp);
-		value_to_zval(v_argv[i], tmp);
-		z_argv[i] = &tmp;
-	}
+	// method
+	zend_function *mptr;
+	find_zend_function(ce, RSTRING_PTR(callee), RSTRING_LEN(callee), &mptr);
 
 	// call
 	zval *retval;
-	int result = call_php_method(ce, obj, RSTRING_PTR(callee), RSTRING_LEN(callee), argc, *z_argv, &retval TSRMLS_CC);
-
-	// release
-	for (i=0; i<argc; i++) {
-		zval_ptr_dtor(z_argv[i]);
-	}
-	free(z_argv);
+	int result = call_php_method(ce, obj, mptr, argc, argv, &retval TSRMLS_CC);
 
 	// exception
 	if (result==FAILURE) {
@@ -508,16 +468,13 @@ VALUE rb_php_class_call(int argc, VALUE *argv, VALUE self)
 VALUE rb_php_object_initialize(VALUE self, VALUE class, VALUE args)
 {
 	// set class
-printf("rb_php_object_initialize 1\n");
 	rb_iv_set(self, "php_class", class);
-printf("rb_php_object_initialize 2\n");
 
 	// create php object
 	zend_class_entry *ce = get_zend_class_entry(class);
 	zval *z_obj;
 	ALLOC_INIT_ZVAL(z_obj);
 	new_php_object(ce, args, z_obj);
-printf("rb_php_object_initialize 3\n");
 	
 	// set resource
 	PHPNativeResource *p = ALLOC(PHPNativeResource);
@@ -525,7 +482,6 @@ printf("rb_php_object_initialize 3\n");
 	p->zobj = z_obj;
 	VALUE resource = Data_Wrap_Struct(CLASS_OF(self), 0, php_native_resource_delete, p);
 	rb_iv_set(self, "php_native_resource", resource);
-printf("rb_php_object_initialize 4\n");
 
 	return self;
 }
