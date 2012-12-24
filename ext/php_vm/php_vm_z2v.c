@@ -61,7 +61,7 @@ static VALUE zval_to_value_hash(HashTable* ht)
 
 		switch(zend_hash_get_current_key_ex(ht, &string_key, NULL, &num_index, 0, &pos)) {
 			case HASH_KEY_IS_STRING:
-				key = rb_str_new_cstr(string_key);
+				key = rb_str_new2(string_key);
 				break;
 			case HASH_KEY_IS_LONG:
 				key = LONG2NUM(num_index);
