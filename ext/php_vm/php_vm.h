@@ -27,6 +27,7 @@ extern void find_zend_class_entry2(char *name, zend_class_entry ***ce);
 extern int is_exception_zend_class_entry(zend_class_entry *ce TSRMLS_DC);
 extern int is_exception_zval(zval *z TSRMLS_DC);
 extern int new_php_object(zend_class_entry *ce, VALUE v_args, zval *retval);
+extern void define_php_properties(VALUE v_obj, zend_class_entry *ce, int is_static);
 extern void define_php_methods(VALUE v_obj, zend_class_entry *ce, int is_static);
 extern int call_php_method(zend_class_entry *ce, zval *obj, zend_function *mptr, int argc, VALUE *v_argv, zval **retval_ptr TSRMLS_DC);
 
@@ -49,11 +50,15 @@ extern VALUE rb_php_class_get(VALUE cls, VALUE rbv_name);
 extern VALUE rb_php_class_initialize(VALUE self, VALUE rbv_name);
 extern VALUE rb_php_class_name(VALUE self);
 extern VALUE rb_php_class_new(int argc, VALUE *argv, VALUE self);
+extern VALUE rb_php_class_getter(VALUE self);
+extern VALUE rb_php_class_setter(VALUE self, VALUE value);
 extern VALUE rb_php_class_call(int argc, VALUE *argv, VALUE self);
 
 // class PHPVM::PHPObject
 extern VALUE rb_php_object_initialize(VALUE self, VALUE class, VALUE arg_arr);
 extern VALUE rb_php_object_php_class(VALUE self);
+extern VALUE rb_php_object_getter(VALUE self);
+extern VALUE rb_php_object_setter(VALUE self, VALUE value);
 extern VALUE rb_php_object_call(int argc, VALUE *argv, VALUE self);
 
 // module

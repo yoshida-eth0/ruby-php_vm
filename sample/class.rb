@@ -27,14 +27,14 @@ class HelloClass
 
 	// static
 
-	public static function classGetHello($name)
+	public static function staticGetHello($name)
 	{
 		return "Hello {$name}!!";
 	}
 
-	public static function classSayHello($name)
+	public static function staticSayHello($name)
 	{
-		var_dump(self::classGetHello($name));
+		var_dump(self::staticGetHello($name));
 	}
 }
 EOS
@@ -52,6 +52,6 @@ h.instanceSayHello
 p h.instanceGetHello
 puts ""
 
-puts "[class method]"
-HelloClass.classSayHello("class world")
-p HelloClass.classGetHello("class world")
+puts "[static method]"
+HelloClass.staticSayHello("static world")
+p HelloClass.staticGetHello("static world")
