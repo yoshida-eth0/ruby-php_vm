@@ -76,11 +76,10 @@ void value_to_zval(VALUE v, zval *z)
 			break;
 		// object string
 		default:{
-			VALUE cls = CLASS_OF(v);
-			if (cls==rb_cPHPObject || cls==rb_ePHPExceptionObject) {
-				// wrap php object
-				// TODO
-				z = get_zval(v);
+			zval *resource_zobj = get_zval(v);
+			if (resource_zobj) {
+				// php native resource
+				*z = *resource_zobj;
 			} else {
 				// other to_s
 				v = rb_obj_as_string(v);

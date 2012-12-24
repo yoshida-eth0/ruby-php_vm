@@ -315,7 +315,7 @@ zend_class_entry* get_zend_class_entry(VALUE self)
 	}
 
 	PHPNativeResource *p;
-	Data_Get_Struct(rb_iv_get(self, "php_native_resource"), PHPNativeResource, p);
+	Data_Get_Struct(resource, PHPNativeResource, p);
 	if (p) {
 		return p->ce;
 	}
@@ -330,7 +330,7 @@ zval* get_zval(VALUE self)
 	}
 
 	PHPNativeResource *p;
-	Data_Get_Struct(rb_iv_get(self, "php_native_resource"), PHPNativeResource, p);
+	Data_Get_Struct(resource, PHPNativeResource, p);
 	if (p) {
 		return p->zobj;
 	}
@@ -421,6 +421,7 @@ VALUE rb_php_class_initialize(VALUE self, VALUE v_name)
 	// set resource
 	PHPNativeResource *p = ALLOC(PHPNativeResource);
 	p->ce = *ce;
+	p->zobj = NULL;
 	VALUE resource = Data_Wrap_Struct(CLASS_OF(self), 0, php_native_resource_delete, p);
 	rb_iv_set(self, "php_native_resource", resource);
 
