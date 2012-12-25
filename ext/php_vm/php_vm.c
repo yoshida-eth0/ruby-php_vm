@@ -7,6 +7,7 @@
 // global
 
 VALUE rb_mPHPVM;
+VALUE rb_mPHPGlobal;
 VALUE rb_cPHPClass;
 VALUE rb_cPHPObject;
 VALUE rb_ePHPError;
@@ -456,9 +457,153 @@ VALUE rb_php_vm_exec(VALUE cls, VALUE code)
 	return Qnil;
 }
 
-VALUE rb_php_vm_getClass(VALUE cls, VALUE v_class_name)
+VALUE rb_php_vm_get_class(VALUE cls, VALUE v_class_name)
 {
 	return rb_php_class_get(rb_cPHPClass, v_class_name);
+}
+
+VALUE rb_php_vm_define_global_constants(VALUE cls)
+{
+	TSRMLS_FETCH();
+
+	// method
+	zend_function *mptr;
+	find_zend_function(NULL, "get_defined_constants", strlen("get_defined_constants"), &mptr);
+	if (!mptr) {
+		return Qfalse;
+	}
+
+	// call method
+	zval *z_val;
+	int result = call_php_method(NULL, NULL, mptr, 0, NULL, &z_val TSRMLS_CC);
+	if (result==FAILURE) {
+		return Qfalse;
+	}
+
+	HashTable* ht = Z_ARRVAL_P(z_val);
+	HashPosition pos;
+	zval** data;
+
+	zend_hash_internal_pointer_reset_ex(ht, &pos);
+	while (SUCCESS == zend_hash_get_current_data_ex(ht, (void **)&data, &pos)) {
+		char *string_key;
+		ulong num_index;
+
+		switch(zend_hash_get_current_key_ex(ht, &string_key, NULL, &num_index, 0, &pos)) {
+			case HASH_KEY_IS_STRING:{
+				if (0x61<=string_key[0] && string_key[0]<=0x7a) {
+					// lower case
+					char *string_key2 = malloc(strlen(string_key));
+					string_key2[0] = string_key2[0]-32;
+					if (!rb_const_defined(rb_mPHPGlobal, rb_intern(string_key2))) {
+						rb_define_const(rb_mPHPGlobal, string_key2, zval_to_value(*data));
+					}
+					free(string_key2);
+				} else {
+					// upper case
+					if (!rb_const_defined(rb_mPHPGlobal, rb_intern(string_key))) {
+						rb_define_const(rb_mPHPGlobal, string_key, zval_to_value(*data));
+					}
+				}
+				break;
+			}
+		}
+
+		zend_hash_move_forward_ex(ht, &pos);
+	}
+	return Qtrue;
+}
+
+VALUE rb_php_vm_define_global_functions(VALUE cls)
+{
+	TSRMLS_FETCH();
+
+	// method
+	zend_function *mptr;
+	find_zend_function(NULL, "get_defined_functions", strlen("get_defined_functions"), &mptr);
+	if (!mptr) {
+		return Qfalse;
+	}
+
+	// call method
+	zval *z_val;
+	int result = call_php_method(NULL, NULL, mptr, 0, NULL, &z_val TSRMLS_CC);
+	if (result==FAILURE) {
+		return Qfalse;
+	}
+
+	HashTable* ht = Z_ARRVAL_P(z_val);
+	HashPosition pos;
+	zval** data;
+
+	zend_hash_internal_pointer_reset_ex(ht, &pos);
+	while (SUCCESS == zend_hash_get_current_data_ex(ht, (void **)&data, &pos)) {
+		HashTable* ht2 = Z_ARRVAL_P(*data);
+		HashPosition pos2;
+		zval** data2;
+
+		zend_hash_internal_pointer_reset_ex(ht2, &pos2);
+		while (SUCCESS == zend_hash_get_current_data_ex(ht2, (void **)&data2, &pos2)) {
+			rb_define_module_function(rb_mPHPGlobal, Z_STRVAL_P(*data2), rb_php_global_function_call, -1);
+			zend_hash_move_forward_ex(ht2, &pos2);
+		}
+
+		zend_hash_move_forward_ex(ht, &pos);
+	}
+	return Qtrue;
+}
+
+VALUE rb_php_vm_define_global_classes(VALUE cls)
+{
+	TSRMLS_FETCH();
+
+	// method
+	zend_function *mptr;
+	find_zend_function(NULL, "get_declared_classes", strlen("get_declared_classes"), &mptr);
+	if (!mptr) {
+		return Qfalse;
+	}
+
+	// call method
+	zval *z_val;
+	int result = call_php_method(NULL, NULL, mptr, 0, NULL, &z_val TSRMLS_CC);
+	if (result==FAILURE) {
+		return Qfalse;
+	}
+
+	HashTable* ht = Z_ARRVAL_P(z_val);
+	HashPosition pos;
+	zval** data;
+
+	zend_hash_internal_pointer_reset_ex(ht, &pos);
+	while (SUCCESS == zend_hash_get_current_data_ex(ht, (void **)&data, &pos)) {
+		rb_define_module_function(rb_mPHPGlobal, Z_STRVAL_P(*data), rb_php_global_class_call, 0);
+		zend_hash_move_forward_ex(ht, &pos);
+	}
+	return Qtrue;
+}
+
+VALUE rb_php_vm_define_global(VALUE cls)
+{
+	VALUE res1 = rb_php_vm_define_global_constants(cls);
+	VALUE res2 = rb_php_vm_define_global_functions(cls);
+	VALUE res3 = rb_php_vm_define_global_classes(cls);
+	return res1==Qtrue && res2==Qtrue && res3==Qtrue;
+}
+
+
+// module PHPVM::PHPGlobal
+
+VALUE rb_php_global_function_call(int argc, VALUE *argv, VALUE self)
+{
+	VALUE callee = get_callee_name();
+	return call_php_method_bridge(NULL, NULL, callee, argc, argv);
+}
+
+VALUE rb_php_global_class_call(VALUE self)
+{
+	VALUE callee = get_callee_name();
+	return rb_php_class_get(rb_cPHPClass, callee);
 }
 
 
@@ -654,9 +799,17 @@ void Init_php_vm()
 	rb_define_singleton_method(rb_mPHPVM, "require", rb_php_vm_require, 1);
 	rb_define_singleton_method(rb_mPHPVM, "require_once", rb_php_vm_require_once, 1);
 	rb_define_singleton_method(rb_mPHPVM, "exec", rb_php_vm_exec, 1);
-	rb_define_singleton_method(rb_mPHPVM, "getClass", rb_php_vm_getClass, 1);
+	rb_define_singleton_method(rb_mPHPVM, "get_class", rb_php_vm_get_class, 1);
+	rb_define_singleton_method(rb_mPHPVM, "define_global_constants", rb_php_vm_define_global_constants, 0);
+	rb_define_singleton_method(rb_mPHPVM, "define_global_functions", rb_php_vm_define_global_functions, 0);
+	rb_define_singleton_method(rb_mPHPVM, "define_global_classes", rb_php_vm_define_global_classes, 0);
+	rb_define_singleton_method(rb_mPHPVM, "define_global", rb_php_vm_define_global, 0);
 
 	rb_define_const(rb_mPHPVM, "VERSION", rb_str_new2("1.1.2"));
+
+	// module PHPVM::PHPGlobal
+	rb_mPHPGlobal = rb_define_module_under(rb_mPHPVM, "PHPGlobal");
+	rb_php_vm_define_global(rb_mPHPVM);
 
 	// class PHPVM::PHPClass
 	rb_cPHPClass = rb_define_class_under(rb_mPHPVM, "PHPClass", rb_cObject);

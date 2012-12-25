@@ -14,7 +14,7 @@ class JsonConvert
 }
 EOS
 
-JsonConvert = PHPVM.getClass("JsonConvert")
+JsonConvert = PHPVM.get_class("JsonConvert")
 
 h = {
   :arr => [:a, :b, :c],

@@ -31,7 +31,7 @@ class AccessorClass
 }
 EOS
 
-AccessorClass = PHPVM.getClass("AccessorClass")
+AccessorClass = PHPVM.get_class("AccessorClass")
 
 ac = AccessorClass.new
 ac.ivar1 = "abc"

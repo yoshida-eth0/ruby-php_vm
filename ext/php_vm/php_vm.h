@@ -43,7 +43,15 @@ extern zval* get_zval(VALUE self);
 // module PHPVM
 extern VALUE rb_php_vm_require(VALUE cls, VALUE rbv_filepath);
 extern VALUE rb_php_vm_exec(VALUE cls, VALUE rbv_code);
-extern VALUE rb_php_vm_getClass(VALUE cls, VALUE rbv_class_name);
+extern VALUE rb_php_vm_get_class(VALUE cls, VALUE rbv_class_name);
+extern VALUE rb_php_vm_define_global_constants(VALUE cls);
+extern VALUE rb_php_vm_define_global_functions(VALUE cls);
+extern VALUE rb_php_vm_define_global_classes(VALUE cls);
+extern VALUE rb_php_vm_define_global(VALUE cls);
+
+// module PHPVM::PHPGlobal
+extern VALUE rb_php_global_function_call(int argc, VALUE *argv, VALUE self);
+extern VALUE rb_php_global_class_call(VALUE self);
 
 // class PHPVM::PHPClass
 extern VALUE rb_php_class_get(VALUE cls, VALUE rbv_name);

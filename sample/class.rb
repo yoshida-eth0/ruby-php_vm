@@ -39,7 +39,7 @@ class HelloClass
 }
 EOS
 
-HelloClass = PHPVM::getClass("HelloClass")
+HelloClass = PHPVM::get_class("HelloClass")
 
 puts "[class]"
 puts HelloClass

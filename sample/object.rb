@@ -14,11 +14,6 @@ class ObjectRef
 		$this->_val = $val;
 	}
 
-	public static function create($val)
-	{
-		return new self($val);
-	}
-
 	public static function show($obj)
 	{
 		var_dump($obj);
@@ -26,7 +21,7 @@ class ObjectRef
 }
 EOS
 
-ObjectRef = PHPVM.getClass("ObjectRef")
+ObjectRef = PHPVM.get_class("ObjectRef")
 
-o = ObjectRef.create("hello")
+o = ObjectRef.new("hello")
 ObjectRef.show(o)
