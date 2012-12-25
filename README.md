@@ -21,3 +21,8 @@ Install PHP (sapi/embed)
 	$ ./configure --prefix=/usr/local --enable-embed=shared --disable-cli --disable-cgi --without-pear
 	$ make
 	$ sudo make install
+
+
+Examples
+------
+https://github.com/yoshida-eth0/ruby-php_vm/tree/master/sample
