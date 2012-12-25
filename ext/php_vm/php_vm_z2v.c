@@ -76,6 +76,8 @@ static VALUE zval_to_value_hash(HashTable* ht)
 
 static VALUE zval_to_value_object(zval *z)
 {
+	TSRMLS_FETCH();
+
 	// class name
 	const char *name = "";
 	zend_uint name_len = 0;
@@ -101,6 +103,9 @@ static VALUE zval_to_value_object(zval *z)
 
 		rb_iv_set(obj, "php_class", class);
 	}
+
+	// retain
+	Z_ADDREF_P(z);
 
 	// resource
 	PHPNativeResource *p = ALLOC(PHPNativeResource);

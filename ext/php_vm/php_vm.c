@@ -118,6 +118,8 @@ int new_php_object(zend_class_entry *ce, VALUE v_args, zval *retval)
 	int result = FAILURE;
 
 	if (ce->constructor) {
+		TSRMLS_FETCH();
+
 		// defined constructor
 /*
 		if (!(ce->constructor->common.fn_flags & ZEND_ACC_PUBLIC)) {
@@ -310,6 +312,8 @@ VALUE get_callee_name()
 
 VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, VALUE callee, int argc, VALUE *argv)
 {
+	TSRMLS_FETCH();
+
 	// callee
 	if (callee==Qnil) {
 		VALUE exception = rb_exc_new2(rb_ePHPError, "callee is nil");
@@ -351,6 +355,9 @@ VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, VALUE callee, int 
 				zend_update_static_property(ce, RSTRING_PTR(callee), RSTRING_LEN(callee), z_val TSRMLS_CC);
 			}
 
+			// release
+			zval_ptr_dtor(&z_val);
+
 			return Qnil;
 		} else {
 			// getter
@@ -372,6 +379,10 @@ VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, VALUE callee, int 
 
 void php_native_resource_delete(PHPNativeResource *p)
 {
+	if (p->zobj) {
+		zval_ptr_dtor(&p->zobj);
+		p->zobj = NULL;
+	}
 	free(p);
 }
 
@@ -440,6 +451,7 @@ VALUE rb_php_vm_require_once(VALUE cls, VALUE filepath)
 
 VALUE rb_php_vm_exec(VALUE cls, VALUE code)
 {
+	TSRMLS_FETCH();
 	php_eval_string(RSTRING_PTR(code), RSTRING_LEN(code) TSRMLS_CC);
 	return Qnil;
 }
@@ -493,7 +505,7 @@ VALUE rb_php_class_initialize(VALUE self, VALUE v_name)
 	VALUE resource = Data_Wrap_Struct(CLASS_OF(self), 0, php_native_resource_delete, p);
 	rb_iv_set(self, "php_native_resource", resource);
 
-	// define php static methods
+	// define php static properties and methods
 	define_php_properties(self, *ce, 1);
 	define_php_methods(self, *ce, 1);
 
@@ -510,6 +522,7 @@ VALUE rb_php_class_new(int argc, VALUE *argv, VALUE self)
 	VALUE args;
 	rb_scan_args(argc, argv, "*", &args);
 
+	// alloc
 	VALUE obj = Qnil;
 	zend_class_entry *ce = get_zend_class_entry(self);
 	if (is_exception_zend_class_entry(ce)) {
@@ -519,7 +532,7 @@ VALUE rb_php_class_new(int argc, VALUE *argv, VALUE self)
 	}
 	rb_php_object_initialize(obj, self, args);
 
-	// define php instance method
+	// define php instance properties and methods
 	define_php_properties(obj, ce, 0);
 	define_php_methods(obj, ce, 0);
 
@@ -614,6 +627,7 @@ VALUE rb_php_exception_object_initialize(int argc, VALUE *argv, VALUE self)
 
 void php_vm_module_init()
 {
+	TSRMLS_FETCH();
 	int argc = 1;
 	char *argv[2] = {"php_vm", NULL};
 	php_embed_init(argc, argv PTSRMLS_CC);
@@ -622,6 +636,7 @@ void php_vm_module_init()
 
 void php_vm_module_exit()
 {
+	TSRMLS_FETCH();
 	php_embed_shutdown(TSRMLS_C);
 }
 

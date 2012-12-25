@@ -79,6 +79,8 @@ void value_to_zval(VALUE v, zval *z)
 			zval *resource_zobj = get_zval(v);
 			if (resource_zobj) {
 				// php native resource
+				//zval_ptr_dtor(&z);
+				zval_dtor(z);
 				*z = *resource_zobj;
 			} else {
 				// other to_s
