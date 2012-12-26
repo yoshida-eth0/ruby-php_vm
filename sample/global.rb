@@ -22,6 +22,8 @@ class PHPWorld
       "add3" => "value3",
     })
     print_r(query_hash)
+
+    echo http_build_query(query_hash)+"\n"
   end
 end
 

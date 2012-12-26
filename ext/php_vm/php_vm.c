@@ -515,7 +515,7 @@ VALUE rb_php_vm_get_class(VALUE cls, VALUE v_class_name)
 	return rb_php_class_get(rb_cPHPClass, v_class_name);
 }
 
-VALUE rb_php_vm_define_global_constants(VALUE cls)
+VALUE define_global_constants()
 {
 	TSRMLS_FETCH();
 
@@ -567,7 +567,7 @@ VALUE rb_php_vm_define_global_constants(VALUE cls)
 	return Qtrue;
 }
 
-VALUE rb_php_vm_define_global_functions(VALUE cls)
+VALUE define_global_functions()
 {
 	TSRMLS_FETCH();
 
@@ -606,7 +606,7 @@ VALUE rb_php_vm_define_global_functions(VALUE cls)
 	return Qtrue;
 }
 
-VALUE rb_php_vm_define_global_classes(VALUE cls)
+VALUE define_global_classes()
 {
 	TSRMLS_FETCH();
 
@@ -638,9 +638,9 @@ VALUE rb_php_vm_define_global_classes(VALUE cls)
 
 VALUE rb_php_vm_define_global(VALUE cls)
 {
-	VALUE res1 = rb_php_vm_define_global_constants(cls);
-	VALUE res2 = rb_php_vm_define_global_functions(cls);
-	VALUE res3 = rb_php_vm_define_global_classes(cls);
+	VALUE res1 = define_global_constants();
+	VALUE res2 = define_global_functions();
+	VALUE res3 = define_global_classes();
 	return res1==Qtrue && res2==Qtrue && res3==Qtrue;
 }
 
@@ -657,6 +657,37 @@ VALUE rb_php_global_class_call(VALUE self)
 {
 	VALUE callee = get_callee_name();
 	return rb_php_class_get(rb_cPHPClass, callee);
+}
+
+VALUE rb_php_global_echo(int argc, VALUE *argv, VALUE self)
+{
+	int i;
+
+	if (argc==0) {
+		VALUE exception = rb_exc_new2(rb_eArgError, "Too few arguments");
+		rb_exc_raise(exception);
+	}
+
+	// format
+	char *format = malloc(argc*2+1);
+	for (i=0; i<argc; i++) {
+		format[i*2] = '%';
+		format[i*2+1] = 's';
+	}
+	format[i*2] = '\0';
+
+	// argv
+	VALUE *argv2 = malloc(sizeof(VALUE)*(argc+1));
+	argv2[0] = rb_str_new2(format);
+	for (i=0; i<argc; i++) {
+		argv2[i+1] = argv[i];
+	}
+	call_php_method_bridge(NULL, NULL, rb_str_new2("printf"), argc+1, argv2);
+
+	// release
+	free(format);
+	free(argv2);
+	return Qnil;
 }
 
 
@@ -853,15 +884,13 @@ void Init_php_vm()
 	rb_define_singleton_method(rb_mPHPVM, "require_once", rb_php_vm_require_once, 1);
 	rb_define_singleton_method(rb_mPHPVM, "exec", rb_php_vm_exec, 1);
 	rb_define_singleton_method(rb_mPHPVM, "get_class", rb_php_vm_get_class, 1);
-	rb_define_singleton_method(rb_mPHPVM, "define_global_constants", rb_php_vm_define_global_constants, 0);
-	rb_define_singleton_method(rb_mPHPVM, "define_global_functions", rb_php_vm_define_global_functions, 0);
-	rb_define_singleton_method(rb_mPHPVM, "define_global_classes", rb_php_vm_define_global_classes, 0);
 	rb_define_singleton_method(rb_mPHPVM, "define_global", rb_php_vm_define_global, 0);
 
-	rb_define_const(rb_mPHPVM, "VERSION", rb_str_new2("1.2.1"));
+	rb_define_const(rb_mPHPVM, "VERSION", rb_str_new2("1.2.2"));
 
 	// module PHPVM::PHPGlobal
 	rb_mPHPGlobal = rb_define_module_under(rb_mPHPVM, "PHPGlobal");
+	rb_define_module_function(rb_mPHPGlobal, "echo", rb_php_global_echo, -1);
 	rb_php_vm_define_global(rb_mPHPVM);
 
 	// class PHPVM::PHPClass
