@@ -129,7 +129,7 @@ VALUE zval_to_value(zval *z)
 			case IS_LONG:
 				return INT2NUM(Z_LVAL_P(z));
 			case IS_DOUBLE:
-				return DBL2NUM(Z_DVAL_P(z));
+				return rb_float_new(Z_DVAL_P(z));
 			case IS_ARRAY:
 			case IS_CONSTANT_ARRAY:{
 				HashTable* ht = Z_ARRVAL_P(z);
