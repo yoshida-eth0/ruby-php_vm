@@ -34,6 +34,7 @@ extern int call_php_method(zend_class_entry *ce, zval *obj, zend_function *mptr,
 // Ruby
 extern VALUE get_callee_name();
 extern VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, VALUE callee, int argc, VALUE *argv);
+extern void value_copy(VALUE dst, VALUE src);
 
 // PHP Native resource
 extern void php_native_resource_delete(PHPNativeResource *p);

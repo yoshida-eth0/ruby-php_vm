@@ -226,7 +226,7 @@ void define_php_methods(VALUE v_obj, zend_class_entry *ce, int is_static)
 			}
 		} else {
 			// instance method
-			if (strcmp("__construct", fname)==0) {
+			if (strcmp("__construct", fname)==0 || strcmp(ce->name, fname)==0) {
 				// __construct => no define
 
 			} else if (0==(flag & ZEND_ACC_STATIC)) {
@@ -243,16 +243,6 @@ int call_php_method(zend_class_entry *ce, zval *obj, zend_function *mptr, int ar
 {
 	int result = FAILURE;
 
-	// argv
-	zval ***z_argv = malloc(sizeof(zval **) * argc);
-	long i;
-	for (i=0; i<argc; i++) {
-		zval *tmp;
-		MAKE_STD_ZVAL(tmp);
-		value_to_zval(v_argv[i], tmp);
-		z_argv[i] = &tmp;
-	}
-
 	// call info
 	zend_fcall_info fci;
 	zend_fcall_info_cache fcc;
@@ -265,9 +255,9 @@ int call_php_method(zend_class_entry *ce, zval *obj, zend_function *mptr, int ar
 	fci.symbol_table = NULL;
 	fci.object_ptr = obj;
 	fci.retval_ptr_ptr = retval_ptr;
-	fci.param_count = argc;
-	fci.params = z_argv;
-	fci.no_separation = 1;
+	fci.param_count = 0;
+	fci.params = NULL;
+	fci.no_separation = 0;
 
 	fcc.initialized = 1;
 	fcc.function_handler = mptr;
@@ -275,19 +265,49 @@ int call_php_method(zend_class_entry *ce, zval *obj, zend_function *mptr, int ar
 	fcc.called_scope = ce ? ce : NULL;
 	fcc.object_ptr = obj;
 
+	// zval args
+	zval *z_args;
+	MAKE_STD_ZVAL(z_args);
+	array_init(z_args);
+
+	long i;
+	for (i=0; i<argc; i++) {
+		zval *new_var;
+		MAKE_STD_ZVAL(new_var);
+		value_to_zval(v_argv[i], new_var);
+
+		zend_hash_next_index_insert(Z_ARRVAL_P(z_args), &new_var, sizeof(zval *), NULL);
+	}
+
+	zend_fcall_info_args(&fci, z_args);
+
 	// call
 	zend_try {
 		result = zend_call_function(&fci, &fcc TSRMLS_CC);
 	} zend_catch {
+		// EG(exception) is NULL... Why??
 		//printf("call_php_method exception: %p\n", EG(exception));
 	} zend_end_try();
 
-	// release
-	for (i=0; i<argc; i++) {
-		zval_ptr_dtor(z_argv[i]);
+	// reference variable
+	HashPosition pos;
+	zval **arg;
+	zend_arg_info *arg_info = mptr->common.arg_info;
+	zend_hash_internal_pointer_reset_ex(Z_ARRVAL_P(z_args), &pos);
+	for (i=0; i<argc && i<mptr->common.num_args; i++) {
+		if (arg_info->pass_by_reference) {
+			zend_hash_get_current_data_ex(Z_ARRVAL_P(z_args), (void *)&arg, &pos);
+			value_copy(v_argv[i], zval_to_value(*arg));
+		}
+		zend_hash_move_forward_ex(Z_ARRVAL_P(z_args), &pos);
+		arg_info++;
 	}
-	free(z_argv);
 
+	// release
+	for (i=0; i<fci.param_count; i++) {
+		zval_ptr_dtor(fci.params[i]);
+	}
+	zend_fcall_info_args_clear(&fci, 1);
 	return result;
 }
 
@@ -299,9 +319,9 @@ VALUE backtrace_re;
 VALUE get_callee_name()
 {
 	VALUE backtrace_arr = rb_funcall(rb_mKernel, rb_intern("caller"), 1, INT2NUM(0));
-	if (backtrace_arr) {
+	if (backtrace_arr!=Qnil) {
 		VALUE backtrace = rb_funcall(backtrace_arr, rb_intern("first"), 0);
-		if (backtrace) {
+		if (backtrace!=Qnil) {
 			VALUE m = rb_funcall(backtrace, rb_intern("match"), 1, backtrace_re);
 			if (m!=Qnil) {
 				return rb_funcall(m, rb_intern("[]"), 1, INT2NUM(3));
@@ -340,6 +360,7 @@ VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, VALUE callee, int 
 			rb_exc_raise(exception);
 		}
 	} else {
+		// accessor
 		VALUE is_setter = rb_funcall(callee, rb_intern("end_with?"), 1, rb_str_new2("="));
 
 		if (is_setter) {
@@ -373,6 +394,38 @@ VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, VALUE callee, int 
 	}
 
 	return zval_to_value(z_val);
+}
+
+void value_copy(VALUE dst, VALUE src)
+{
+	switch (TYPE(dst)) {
+		case T_ARRAY:{
+			if (TYPE(src)==T_ARRAY) {
+				rb_funcall(dst, rb_intern("replace"), 1, src);
+			} else {
+				rb_funcall(dst, rb_intern("clear"), 0);
+				rb_funcall(dst, rb_intern("<<"), 1, src);
+			}
+			break;
+		}
+		case T_HASH:{
+			rb_funcall(dst, rb_intern("clear"), 0);
+			if (TYPE(src)==T_HASH) {
+				rb_funcall(dst, rb_intern("update"), 1, src);
+			} else {
+				rb_funcall(dst, rb_intern("[]"), 2, rb_str_new2("reference"), src);
+			}
+			break;
+		}
+		case T_STRING:{
+			rb_funcall(dst, rb_intern("clear"), 0);
+			if (TYPE(src)!=T_STRING) {
+				src = rb_funcall(src, rb_intern("to_s"), 0);
+			}
+			rb_funcall(dst, rb_intern("concat"), 1, src);
+			break;
+		}
+	}
 }
 
 
