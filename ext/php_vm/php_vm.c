@@ -314,14 +314,13 @@ int call_php_method(zend_class_entry *ce, zval *obj, zend_function *mptr, int ar
 
 // Ruby
 
-VALUE backtrace_re;
-
 VALUE get_callee_name()
 {
 	VALUE backtrace_arr = rb_funcall(rb_mKernel, rb_intern("caller"), 1, INT2NUM(0));
 	if (backtrace_arr!=Qnil) {
 		VALUE backtrace = rb_funcall(backtrace_arr, rb_intern("first"), 0);
 		if (backtrace!=Qnil) {
+			VALUE backtrace_re = rb_funcall(rb_cRegexp, rb_intern("new"), 1, rb_str_new2("^(.+?):(\\d+)(?::in `(.*)')?"));
 			VALUE m = rb_funcall(backtrace, rb_intern("match"), 1, backtrace_re);
 			if (m!=Qnil) {
 				return rb_funcall(m, rb_intern("[]"), 1, INT2NUM(3));
@@ -690,6 +689,19 @@ VALUE rb_php_global_echo(int argc, VALUE *argv, VALUE self)
 	return Qnil;
 }
 
+VALUE rb_php_global_array(int argc, VALUE *argv, VALUE self)
+{
+	VALUE result;
+	if (argc==1 && TYPE(argv[0])==T_HASH) {
+		// hash
+		result = argv[0];
+	} else {
+		// argv
+		rb_scan_args(argc, argv, "*", &result);
+	}
+	return result;
+}
+
 
 // class PHPVM::PHPClass
 
@@ -875,8 +887,6 @@ void Init_php_vm()
 	php_vm_module_init();
 	atexit(php_vm_module_exit);
 
-	backtrace_re = rb_funcall(rb_cRegexp, rb_intern("new"), 1, rb_str_new2("^(.+?):(\\d+)(?::in `(.*)')?"));
-
 	// module PHPVM
 	rb_mPHPVM = rb_define_module("PHPVM");
 
@@ -891,6 +901,7 @@ void Init_php_vm()
 	// module PHPVM::PHPGlobal
 	rb_mPHPGlobal = rb_define_module_under(rb_mPHPVM, "PHPGlobal");
 	rb_define_module_function(rb_mPHPGlobal, "echo", rb_php_global_echo, -1);
+	rb_define_module_function(rb_mPHPGlobal, "array", rb_php_global_array, -1);
 	rb_php_vm_define_global(rb_mPHPVM);
 
 	// class PHPVM::PHPClass

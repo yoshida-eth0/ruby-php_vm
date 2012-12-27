@@ -14,11 +14,11 @@ query_hash = {}
 parse_str(url_hash["query"], query_hash)
 print_r(query_hash)
 
-query_hash = array_merge(query_hash, {
+query_hash = array_merge(query_hash, array(
   "add1" => "value1",
   "add2" => "value2",
   "add3" => "value3",
-})
+))
 print_r(query_hash)
 
 echo http_build_query(query_hash)+"\n"
