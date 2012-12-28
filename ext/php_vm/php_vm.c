@@ -13,6 +13,40 @@ VALUE rb_cPHPObject;
 VALUE rb_ePHPError;
 VALUE rb_ePHPExceptionObject;
 VALUE rb_ePHPSyntaxError;
+VALUE rb_ePHPErrorReporting;
+
+
+// PHP Embed
+static int php_embed_output_handler(const char *str, unsigned int str_length TSRMLS_DC)
+{
+	VALUE proc = rb_cv_get(rb_mPHPVM, "@@output_handler");
+	if (rb_obj_is_proc(proc)) {
+		VALUE args = rb_ary_new();
+		rb_ary_push(args, rb_str_new(str, str_length));
+		rb_proc_call(proc, args);
+		return str_length;
+	} else {
+		printf("%s", str);
+	}
+	return str_length;
+}
+
+static void php_embed_error_handler(char *message)
+{
+	VALUE proc = rb_cv_get(rb_mPHPVM, "@@error_handler");
+	VALUE report = rb_exc_new2(rb_ePHPErrorReporting, message);
+	if (rb_obj_is_proc(proc)) {
+		VALUE args = rb_ary_new();
+		rb_ary_push(args, report);
+		rb_proc_call(proc, args);
+	} else {
+		if (rb_iv_get(report, "error_level")==ID2SYM(rb_intern("Fatal"))) {
+			rb_exc_raise(report);
+		} else {
+			printf("%s\n", message);
+		}
+	}
+}
 
 
 // PHP
@@ -472,6 +506,34 @@ zval* get_zval(VALUE self)
 
 // module PHPVM
 
+VALUE rb_php_vm_get_output_handler(VALUE cls)
+{
+	return rb_cv_get(rb_mPHPVM, "@@output_handler");
+}
+
+VALUE rb_php_vm_set_output_handler(VALUE cls, VALUE proc)
+{
+	if (proc!=Qnil && !rb_obj_is_proc(proc)) {
+		rb_raise(rb_eArgError, "proc is not proc object");
+	}
+	rb_cv_set(rb_mPHPVM, "@@output_handler", proc);
+	return Qnil;
+}
+
+VALUE rb_php_vm_get_error_handler(VALUE cls)
+{
+	return rb_cv_get(rb_mPHPVM, "@@error_handler");
+}
+
+VALUE rb_php_vm_set_error_handler(VALUE cls, VALUE proc)
+{
+	if (proc!=Qnil && !rb_obj_is_proc(proc)) {
+		rb_raise(rb_eArgError, "proc is not proc object");
+	}
+	rb_cv_set(rb_mPHPVM, "@@error_handler", proc);
+	return Qnil;
+}
+
 void php_vm_require(char *token, VALUE filepath)
 {
 	StringValue(filepath);
@@ -910,6 +972,60 @@ VALUE rb_php_exception_object_initialize(int argc, VALUE *argv, VALUE self)
 	return self;
 }
 
+// class PHPVM::PHPErrorReporting
+
+VALUE rb_php_error_reporting_initialize(int argc, VALUE *argv, VALUE self)
+{
+	VALUE log_message = Qnil;
+	VALUE error_level = Qnil;
+	VALUE message = Qnil;
+	VALUE file = Qnil;
+	VALUE line = Qnil;
+
+	if (argc==1 &&TYPE( argv[0])==T_STRING) {
+		log_message = argv[0];
+		VALUE report_re = rb_funcall(rb_cRegexp, rb_intern("new"), 1, rb_str_new2("^(?:(?:PHP )?([^:]+?)(?: error)?: {0,2})?(.+) in (.+) on line (\\d+)$"));
+		VALUE m = rb_funcall(argv[0], rb_intern("match"), 1, report_re);
+		if (m!=Qnil) {
+			error_level = rb_funcall(m, rb_intern("[]"), 1, INT2NUM(1));
+			error_level = ID2SYM(rb_intern(RSTRING_PTR(error_level)));
+			message = rb_funcall(m, rb_intern("[]"), 1, INT2NUM(2));
+			file = rb_funcall(m, rb_intern("[]"), 1, INT2NUM(3));
+			line = rb_funcall(m, rb_intern("[]"), 1, INT2NUM(4));
+			line = rb_funcall(line, rb_intern("to_i"), 0);
+			argv[0] = message;
+		}
+	}
+	rb_call_super(argc, argv);
+
+	rb_iv_set(self, "log_message", log_message);
+	rb_iv_set(self, "error_level", error_level);
+	rb_iv_set(self, "file", file);
+	rb_iv_set(self, "line", line);
+
+	return self;
+}
+
+VALUE rb_php_error_reporting_log_message(VALUE self)
+{
+	return rb_iv_get(self, "log_message");
+}
+
+VALUE rb_php_error_reporting_error_level(VALUE self)
+{
+	return rb_iv_get(self, "error_level");
+}
+
+VALUE rb_php_error_reporting_file(VALUE self)
+{
+	return rb_iv_get(self, "file");
+}
+
+VALUE rb_php_error_reporting_line(VALUE self)
+{
+	return rb_iv_get(self, "line");
+}
+
 
 // module
 
@@ -931,11 +1047,26 @@ void php_vm_module_exit()
 void Init_php_vm()
 {
 	// initialize php_vm
+	php_embed_module.ub_write = php_embed_output_handler;
+	php_embed_module.log_message = php_embed_error_handler;
+
 	php_vm_module_init();
 	atexit(php_vm_module_exit);
 
+	// ini
+	zend_try {
+		zend_alter_ini_entry("display_errors", sizeof("display_errors"), "0", sizeof("0")-1, PHP_INI_SYSTEM, PHP_INI_STAGE_RUNTIME);
+		zend_alter_ini_entry("log_errors", sizeof("log_errors"), "1", sizeof("1")-1, PHP_INI_SYSTEM, PHP_INI_STAGE_RUNTIME);
+	} zend_catch {
+	} zend_end_try();
+
 	// module PHPVM
 	rb_mPHPVM = rb_define_module("PHPVM");
+
+	rb_define_singleton_method(rb_mPHPVM, "output_handler", rb_php_vm_get_output_handler, 0);
+	rb_define_singleton_method(rb_mPHPVM, "output_handler=", rb_php_vm_set_output_handler, 1);
+	rb_define_singleton_method(rb_mPHPVM, "error_handler", rb_php_vm_get_error_handler, 0);
+	rb_define_singleton_method(rb_mPHPVM, "error_handler=", rb_php_vm_set_error_handler, 1);
 
 	rb_define_singleton_method(rb_mPHPVM, "require", rb_php_vm_require, 1);
 	rb_define_singleton_method(rb_mPHPVM, "require_once", rb_php_vm_require_once, 1);
@@ -947,6 +1078,9 @@ void Init_php_vm()
 	rb_define_singleton_method(rb_mPHPVM, "define_global", rb_php_vm_define_global, 0);
 
 	rb_define_const(rb_mPHPVM, "VERSION", rb_str_new2("1.2.5"));
+
+	rb_cv_set(rb_mPHPVM, "@@output_handler", Qnil);
+	rb_cv_set(rb_mPHPVM, "@@error_handler", Qnil);
 
 	// module PHPVM::PHPGlobal
 	rb_mPHPGlobal = rb_define_module_under(rb_mPHPVM, "PHPGlobal");
@@ -985,4 +1119,12 @@ void Init_php_vm()
 
 	// class PHPVM::PHPSyntaxError < PHPVM::PHPError
 	rb_ePHPSyntaxError = rb_define_class_under(rb_mPHPVM, "PHPSyntaxError", rb_ePHPError);
+
+	// class PHPVM::PHPErrorReporting < PHPVM::PHPError
+	rb_ePHPErrorReporting = rb_define_class_under(rb_mPHPVM, "PHPErrorReporting", rb_ePHPError);
+	rb_define_method(rb_ePHPErrorReporting, "initialize", rb_php_error_reporting_initialize, -1);
+	rb_define_method(rb_ePHPErrorReporting, "log_message", rb_php_error_reporting_log_message, 0);
+	rb_define_method(rb_ePHPErrorReporting, "error_level", rb_php_error_reporting_error_level, 0);
+	rb_define_method(rb_ePHPErrorReporting, "file", rb_php_error_reporting_file, 0);
+	rb_define_method(rb_ePHPErrorReporting, "line", rb_php_error_reporting_line, 0);
 }
