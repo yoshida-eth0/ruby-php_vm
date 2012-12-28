@@ -946,7 +946,7 @@ void Init_php_vm()
 	rb_define_singleton_method(rb_mPHPVM, "get_class", rb_php_vm_get_class, 1);
 	rb_define_singleton_method(rb_mPHPVM, "define_global", rb_php_vm_define_global, 0);
 
-	rb_define_const(rb_mPHPVM, "VERSION", rb_str_new2("1.2.4"));
+	rb_define_const(rb_mPHPVM, "VERSION", rb_str_new2("1.2.5"));
 
 	// module PHPVM::PHPGlobal
 	rb_mPHPGlobal = rb_define_module_under(rb_mPHPVM, "PHPGlobal");
