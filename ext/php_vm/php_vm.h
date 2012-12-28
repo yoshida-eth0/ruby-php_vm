@@ -19,6 +19,11 @@ typedef struct {
 	zval *zobj;
 } PHPNativeResource;
 
+typedef struct {
+	char *token;
+	VALUE filepath;
+} RequireArgs;
+
 
 // PHP
 extern void php_eval_string(char *code, int code_len TSRMLS_DC);
@@ -42,7 +47,11 @@ extern zend_class_entry* get_zend_class_entry(VALUE self);
 extern zval* get_zval(VALUE self);
 
 // module PHPVM
-extern VALUE rb_php_vm_require(VALUE cls, VALUE rbv_filepath);
+extern void php_vm_require(char *construct, VALUE filepath);
+extern VALUE rb_php_vm_require(VALUE cls, VALUE filepath);
+extern VALUE rb_php_vm_require_once(VALUE cls, VALUE filepath);
+extern VALUE rb_php_vm_include(VALUE cls, VALUE filepath);
+extern VALUE rb_php_vm_include_once(VALUE cls, VALUE filepath);
 extern VALUE rb_php_vm_exec(VALUE cls, VALUE rbv_code);
 extern VALUE rb_php_vm_get_class(VALUE cls, VALUE rbv_class_name);
 extern VALUE define_global_constants();
@@ -53,7 +62,12 @@ extern VALUE rb_php_vm_define_global(VALUE cls);
 // module PHPVM::PHPGlobal
 extern VALUE rb_php_global_function_call(int argc, VALUE *argv, VALUE self);
 extern VALUE rb_php_global_class_call(VALUE self);
+extern void php_global_require(char *token, VALUE filepath);
+extern VALUE rb_php_global_require(VALUE cls, VALUE filepath);
+extern VALUE rb_php_global_require_once(VALUE cls, VALUE filepath);
 extern VALUE rb_php_global_echo(int argc, VALUE *argv, VALUE self);
+extern VALUE rb_php_global_print(VALUE self, VALUE arg);
+extern VALUE rb_php_global_array(int argc, VALUE *argv, VALUE self);
 
 // class PHPVM::PHPClass
 extern VALUE rb_php_class_get(VALUE cls, VALUE rbv_name);

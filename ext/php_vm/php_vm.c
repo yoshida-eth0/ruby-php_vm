@@ -472,33 +472,41 @@ zval* get_zval(VALUE self)
 
 // module PHPVM
 
-VALUE rb_php_vm_require(VALUE cls, VALUE filepath)
+void php_vm_require(char *token, VALUE filepath)
 {
 	StringValue(filepath);
 	filepath = rb_funcall(filepath, rb_intern("gsub"), 2, rb_str_new2("\\"), rb_str_new2("\\\\"));
 	filepath = rb_funcall(filepath, rb_intern("gsub"), 2, rb_str_new2("\""), rb_str_new2("\\\""));
 
-	VALUE code = rb_str_new2("require \"");
+	VALUE code = rb_str_new2(token);
+	rb_str_cat2(code, " \"");
 	rb_str_cat(code, RSTRING_PTR(filepath), RSTRING_LEN(filepath));
 	rb_str_cat2(code, "\";");
 
 	php_eval_string(RSTRING_PTR(code), RSTRING_LEN(code));
+}
 
-	return Qnil;
+VALUE rb_php_vm_require(VALUE cls, VALUE filepath)
+{
+	php_vm_require("require", filepath);
+	return Qtrue;
 }
 
 VALUE rb_php_vm_require_once(VALUE cls, VALUE filepath)
 {
-	StringValue(filepath);
-	filepath = rb_funcall(filepath, rb_intern("gsub"), 2, rb_str_new2("\\"), rb_str_new2("\\\\"));
-	filepath = rb_funcall(filepath, rb_intern("gsub"), 2, rb_str_new2("\""), rb_str_new2("\\\""));
+	php_vm_require("require_once", filepath);
+	return Qtrue;
+}
 
-	VALUE code = rb_str_new2("require_once \"");
-	rb_str_cat(code, RSTRING_PTR(filepath), RSTRING_LEN(filepath));
-	rb_str_cat2(code, "\";");
+VALUE rb_php_vm_include(VALUE cls, VALUE filepath)
+{
+	php_vm_require("include", filepath);
+	return Qnil;
+}
 
-	php_eval_string(RSTRING_PTR(code), RSTRING_LEN(code));
-
+VALUE rb_php_vm_include_once(VALUE cls, VALUE filepath)
+{
+	php_vm_require("include_once", filepath);
 	return Qnil;
 }
 
@@ -658,7 +666,40 @@ VALUE rb_php_global_class_call(VALUE self)
 	return rb_php_class_get(rb_cPHPClass, callee);
 }
 
-VALUE rb_php_global_echo(int argc, VALUE *argv, VALUE self)
+static VALUE php_global_require_b_proc(RequireArgs *args)
+{
+	php_vm_require(args->token, args->filepath);
+	return Qnil;
+}
+
+static VALUE php_global_require_r_proc(RequireArgs *args, VALUE e)
+{
+	rb_funcall(Qnil, rb_intern("require"), 1, args->filepath);
+	return Qnil;
+}
+
+void php_global_require(char *token, VALUE filepath)
+{
+	RequireArgs args;
+	args.token = token;
+	args.filepath = filepath;
+
+	rb_rescue(php_global_require_b_proc, (VALUE)&args, php_global_require_r_proc, (VALUE)&args);
+}
+
+VALUE rb_php_global_require(VALUE cls, VALUE filepath)
+{
+	php_global_require("require", filepath);
+	return Qtrue;
+}
+
+VALUE rb_php_global_require_once(VALUE cls, VALUE filepath)
+{
+	php_global_require("require_once", filepath);
+	return Qtrue;
+}
+
+VALUE rb_php_global_echo(int argc, VALUE *argv, VALUE cls)
 {
 	int i;
 
@@ -686,10 +727,16 @@ VALUE rb_php_global_echo(int argc, VALUE *argv, VALUE self)
 	// release
 	free(format);
 	free(argv2);
+
 	return Qnil;
 }
 
-VALUE rb_php_global_array(int argc, VALUE *argv, VALUE self)
+VALUE rb_php_global_print(VALUE cls, VALUE arg)
+{
+	return rb_php_global_echo(1, &arg, cls);
+}
+
+VALUE rb_php_global_array(int argc, VALUE *argv, VALUE cls)
 {
 	VALUE result;
 	if (argc==1 && TYPE(argv[0])==T_HASH) {
@@ -892,6 +939,9 @@ void Init_php_vm()
 
 	rb_define_singleton_method(rb_mPHPVM, "require", rb_php_vm_require, 1);
 	rb_define_singleton_method(rb_mPHPVM, "require_once", rb_php_vm_require_once, 1);
+	rb_define_singleton_method(rb_mPHPVM, "include", rb_php_vm_include, 1);
+	rb_define_singleton_method(rb_mPHPVM, "include_once", rb_php_vm_include_once, 1);
+
 	rb_define_singleton_method(rb_mPHPVM, "exec", rb_php_vm_exec, 1);
 	rb_define_singleton_method(rb_mPHPVM, "get_class", rb_php_vm_get_class, 1);
 	rb_define_singleton_method(rb_mPHPVM, "define_global", rb_php_vm_define_global, 0);
@@ -900,8 +950,13 @@ void Init_php_vm()
 
 	// module PHPVM::PHPGlobal
 	rb_mPHPGlobal = rb_define_module_under(rb_mPHPVM, "PHPGlobal");
+
+	rb_define_module_function(rb_mPHPGlobal, "require", rb_php_global_require, 1);
+	rb_define_module_function(rb_mPHPGlobal, "require_once", rb_php_global_require_once, 1);
 	rb_define_module_function(rb_mPHPGlobal, "echo", rb_php_global_echo, -1);
+	rb_define_module_function(rb_mPHPGlobal, "print", rb_php_global_print, 1);
 	rb_define_module_function(rb_mPHPGlobal, "array", rb_php_global_array, -1);
+
 	rb_php_vm_define_global(rb_mPHPVM);
 
 	// class PHPVM::PHPClass
