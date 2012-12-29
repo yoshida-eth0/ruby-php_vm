@@ -984,7 +984,9 @@ VALUE rb_php_error_reporting_initialize(int argc, VALUE *argv, VALUE self)
 
 	if (argc==1 &&TYPE( argv[0])==T_STRING) {
 		log_message = argv[0];
-		VALUE report_re = rb_funcall(rb_cRegexp, rb_intern("new"), 1, rb_str_new2("^(?:(?:PHP )?([^:]+?)(?: error)?: {0,2})?(.+) in (.+) on line (\\d+)$"));
+		VALUE re_str = rb_str_new2("^(?:(?:PHP )?([^:]+?)(?: error)?: {0,2})?(.+) in (.+) on line (\\d+)$");
+		VALUE re_option = rb_const_get(rb_cRegexp, rb_intern("MULTILINE"));
+		VALUE report_re = rb_funcall(rb_cRegexp, rb_intern("new"), 2, re_str, re_option);
 		VALUE m = rb_funcall(argv[0], rb_intern("match"), 1, report_re);
 		if (m!=Qnil) {
 			error_level = rb_funcall(m, rb_intern("[]"), 1, INT2NUM(1));
