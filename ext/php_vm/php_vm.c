@@ -48,7 +48,7 @@ static void php_embed_error_handler(char *message)
 	}
 }
 
-static void php_vm_catch_exception(zval *ex TSRMLS_DC)
+static void php_vm_exception_hook(zval *ex TSRMLS_DC)
 {
 	VALUE exception = zval_to_value(ex);
 	rb_exc_raise(exception);
@@ -619,7 +619,8 @@ VALUE define_global_constants()
 			case HASH_KEY_IS_STRING:{
 				if (0x61<=string_key[0] && string_key[0]<=0x7a) {
 					// lower case
-					char *string_key2 = malloc(strlen(string_key));
+					char *string_key2 = malloc(strlen(string_key)+1);
+					memcpy(string_key2, string_key, strlen(string_key));
 					string_key2[0] = string_key2[0]-32;
 					if (!rb_const_defined(rb_mPHPGlobal, rb_intern(string_key2))) {
 						rb_define_const(rb_mPHPGlobal, string_key2, zval_to_value(*data));
@@ -699,11 +700,22 @@ VALUE define_global_classes()
 
 	HashTable* ht = Z_ARRVAL_P(z_val);
 	HashPosition pos;
-	zval** data;
+	zval** z_classname;
 
 	zend_hash_internal_pointer_reset_ex(ht, &pos);
-	while (SUCCESS == zend_hash_get_current_data_ex(ht, (void **)&data, &pos)) {
-		rb_define_module_function(rb_mPHPGlobal, Z_STRVAL_P(*data), rb_php_global_class_call, 0);
+	while (SUCCESS == zend_hash_get_current_data_ex(ht, (void **)&z_classname, &pos)) {
+		char *classname = Z_STRVAL_P(*z_classname);
+		int classname_len = Z_STRLEN_P(*z_classname);
+		if (0x41<=classname[0] && classname[0]<=0x5a) {
+			// define class as const if class name is uppercase
+			if (!rb_const_defined(rb_mPHPGlobal, rb_intern(classname))) {
+				VALUE class = rb_php_class_get(rb_cPHPClass, rb_str_new(classname, classname_len));
+				rb_define_const(rb_mPHPGlobal, classname, class);
+			}
+		} else {
+			// define class as module function if class name is lowercase
+			rb_define_module_function(rb_mPHPGlobal, classname, rb_php_global_class_call, 0);
+		}
 		zend_hash_move_forward_ex(ht, &pos);
 	}
 	return Qtrue;
@@ -976,6 +988,7 @@ VALUE rb_php_exception_object_initialize(int argc, VALUE *argv, VALUE self)
 	return self;
 }
 
+
 // class PHPVM::PHPErrorReporting
 
 VALUE rb_php_error_reporting_initialize(int argc, VALUE *argv, VALUE self)
@@ -988,7 +1001,7 @@ VALUE rb_php_error_reporting_initialize(int argc, VALUE *argv, VALUE self)
 
 	if (argc==1 &&TYPE( argv[0])==T_STRING) {
 		log_message = argv[0];
-		VALUE re_str = rb_str_new2("^(?:(?:PHP )?([^:]+?)(?: error)?: {0,2})?(.+) in (.+) on line (\\d+)$");
+		VALUE re_str = rb_str_new2("^PHP ([^:]+?)(?: error)?: {0,2}(.+) in (.+) on line (\\d+)$");
 		VALUE re_option = rb_const_get(rb_cRegexp, rb_intern("MULTILINE"));
 		VALUE report_re = rb_funcall(rb_cRegexp, rb_intern("new"), 2, re_str, re_option);
 		VALUE m = rb_funcall(argv[0], rb_intern("match"), 1, report_re);
@@ -1059,11 +1072,11 @@ void Init_php_vm()
 	php_vm_module_init();
 	atexit(php_vm_module_exit);
 
-	zend_throw_exception_hook = php_vm_catch_exception;
+	zend_throw_exception_hook = php_vm_exception_hook;
 
 	// ini
 	zend_try {
-		zend_alter_ini_entry("display_errors", sizeof("display_errors"), "0", sizeof("0")-1, PHP_INI_SYSTEM, PHP_INI_STAGE_RUNTIME);
+		zend_alter_ini_entry("display_errors", sizeof("display_errors"), "1", sizeof("0")-1, PHP_INI_SYSTEM, PHP_INI_STAGE_RUNTIME);
 		zend_alter_ini_entry("log_errors", sizeof("log_errors"), "1", sizeof("1")-1, PHP_INI_SYSTEM, PHP_INI_STAGE_RUNTIME);
 	} zend_catch {
 	} zend_end_try();
@@ -1099,8 +1112,6 @@ void Init_php_vm()
 	rb_define_module_function(rb_mPHPGlobal, "print", rb_php_global_print, 1);
 	rb_define_module_function(rb_mPHPGlobal, "array", rb_php_global_array, -1);
 
-	rb_php_vm_define_global(rb_mPHPVM);
-
 	// class PHPVM::PHPClass
 	rb_cPHPClass = rb_define_class_under(rb_mPHPVM, "PHPClass", rb_cObject);
 	rb_define_class_variable(rb_cPHPClass, "@@classes", rb_obj_alloc(rb_cHash));
@@ -1135,4 +1146,6 @@ void Init_php_vm()
 	rb_define_method(rb_ePHPErrorReporting, "error_level", rb_php_error_reporting_error_level, 0);
 	rb_define_method(rb_ePHPErrorReporting, "file", rb_php_error_reporting_file, 0);
 	rb_define_method(rb_ePHPErrorReporting, "line", rb_php_error_reporting_line, 0);
+
+	rb_php_vm_define_global(rb_mPHPVM);
 }

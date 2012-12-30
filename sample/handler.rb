@@ -12,16 +12,16 @@ PHPVM.error_handler = Proc.new {|error_report|
     raise error_report
   else
     #puts "error: #{error_report.log_message}"
-    puts "error: #{error_report.error_level}: #{error_report.message} on #{error_report.file} in #{error_report.line}"
+    puts "error: #{error_report.error_level}: #{error_report.message} in #{error_report.file} on line #{error_report.line}"
   end
 }
 
 begin
   PHPVM.exec <<-EOS
-  echo "hello\n";
-  trigger_error("user notice", E_USER_NOTICE);
-  trigger_error("user warning", E_USER_WARNING);
-  trigger_error("user error", E_USER_ERROR);
+    echo "hello\n";
+    trigger_error("user notice", E_USER_NOTICE);
+    trigger_error("user warning", E_USER_WARNING);
+    trigger_error("user error", E_USER_ERROR);
   EOS
 rescue PHPVM::PHPErrorReporting => e
   puts "---"
