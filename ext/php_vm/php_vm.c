@@ -240,8 +240,6 @@ void define_php_methods(VALUE v_obj, zend_class_entry *ce, int is_static)
 	// TODO: access scope
 	// TODO: __toString
 	// TODO: __clone
-	// TODO: __call
-	// TODO: __callStatic
 	// TODO: __get
 	// TODO: __set
 	// TODO: __isset
@@ -260,6 +258,10 @@ void define_php_methods(VALUE v_obj, zend_class_entry *ce, int is_static)
 			if (strcmp("new", fname)==0) {
 				// new => no define
 
+			} else if (strcmp("__callStatic", fname)==0) {
+				// __callStatic => method_missing
+				rb_define_singleton_method(v_obj, "method_missing", rb_php_class_call_method_missing, -1);
+
 			} else if (0<(flag & ZEND_ACC_STATIC)) {
 				// other method
 				rb_define_singleton_method(v_obj, fname, rb_php_class_call, -1);
@@ -268,6 +270,10 @@ void define_php_methods(VALUE v_obj, zend_class_entry *ce, int is_static)
 			// instance method
 			if (strcmp("__construct", fname)==0 || strcmp(ce->name, fname)==0) {
 				// __construct => no define
+
+			} else if (strcmp("__call", fname)==0) {
+				// __call => method_missing
+				rb_define_singleton_method(v_obj, "method_missing", rb_php_object_call_method_missing, -1);
 
 			} else if (0==(flag & ZEND_ACC_STATIC)) {
 				// other method
@@ -926,6 +932,17 @@ VALUE rb_php_class_call(int argc, VALUE *argv, VALUE self)
 	return call_php_method_bridge(ce, NULL, callee, argc, argv);
 }
 
+VALUE rb_php_class_call_method_missing(int argc, VALUE *argv, VALUE self)
+{
+	zend_class_entry *ce = get_zend_class_entry(self);
+
+	VALUE name, args;
+	rb_scan_args(argc, argv, "1*", &name, &args);
+	VALUE argv2[2] = {name, args};
+
+	return call_php_method_bridge(ce, NULL, rb_str_new2("__callStatic"), 2, argv2);
+}
+
 
 // class PHPVM::PHPObject
 
@@ -977,6 +994,18 @@ VALUE rb_php_object_call(int argc, VALUE *argv, VALUE self)
 	zval *zobj = get_zval(self);
 	VALUE callee = get_callee_name();
 	return call_php_method_bridge(ce, zobj, callee, argc, argv);
+}
+
+VALUE rb_php_object_call_method_missing(int argc, VALUE *argv, VALUE self)
+{
+	zend_class_entry *ce = get_zend_class_entry(self);
+	zval *zobj = get_zval(self);
+
+	VALUE name, args;
+	rb_scan_args(argc, argv, "1*", &name, &args);
+	VALUE argv2[2] = {name, args};
+
+	return call_php_method_bridge(ce, zobj, rb_str_new2("__call"), 2, argv2);
 }
 
 

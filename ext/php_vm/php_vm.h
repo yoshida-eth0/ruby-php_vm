@@ -77,6 +77,7 @@ extern VALUE rb_php_class_new(int argc, VALUE *argv, VALUE self);
 extern VALUE rb_php_class_getter(VALUE self);
 extern VALUE rb_php_class_setter(VALUE self, VALUE value);
 extern VALUE rb_php_class_call(int argc, VALUE *argv, VALUE self);
+extern VALUE rb_php_class_call_method_missing(int argc, VALUE *argv, VALUE self);
 
 // class PHPVM::PHPObject
 extern VALUE rb_php_object_initialize(VALUE self, VALUE class, VALUE arg_arr);
@@ -84,6 +85,7 @@ extern VALUE rb_php_object_php_class(VALUE self);
 extern VALUE rb_php_object_getter(VALUE self);
 extern VALUE rb_php_object_setter(VALUE self, VALUE value);
 extern VALUE rb_php_object_call(int argc, VALUE *argv, VALUE self);
+extern VALUE rb_php_object_call_method_missing(int argc, VALUE *argv, VALUE self);
 
 // module
 extern void php_vm_module_init();
