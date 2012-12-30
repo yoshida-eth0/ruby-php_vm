@@ -48,6 +48,12 @@ static void php_embed_error_handler(char *message)
 	}
 }
 
+static void php_vm_catch_exception(zval *ex TSRMLS_DC)
+{
+	VALUE exception = zval_to_value(ex);
+	rb_exc_raise(exception);
+}
+
 
 // PHP
 
@@ -280,8 +286,6 @@ int call_php_method(zend_class_entry *ce, zval *obj, zend_function *mptr, int ar
 	// call info
 	zend_fcall_info fci;
 	zend_fcall_info_cache fcc;
-	zval *return_value;
-	ALLOC_INIT_ZVAL(return_value);
 
 	fci.size = sizeof(fci);
 	fci.function_table = NULL;
@@ -1054,6 +1058,8 @@ void Init_php_vm()
 
 	php_vm_module_init();
 	atexit(php_vm_module_exit);
+
+	zend_throw_exception_hook = php_vm_catch_exception;
 
 	// ini
 	zend_try {
