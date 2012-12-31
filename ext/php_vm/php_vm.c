@@ -154,6 +154,13 @@ void find_zend_function(zend_class_entry *ce, char *name, int name_len, zend_fun
 	free(lcname);
 }
 
+int has_zend_function(zend_class_entry *ce, VALUE method_name)
+{
+	zend_function *mptr;
+	find_zend_function(ce, RSTRING_PTR(method_name), RSTRING_LEN(method_name), &mptr);
+	return mptr!=NULL;
+}
+
 int new_php_object(zend_class_entry *ce, VALUE v_args, zval *retval)
 {
 	int result = FAILURE;
@@ -240,8 +247,6 @@ void define_php_methods(VALUE v_obj, zend_class_entry *ce, int is_static)
 	// TODO: access scope
 	// TODO: __toString
 	// TODO: __clone
-	// TODO: __get
-	// TODO: __set
 	// TODO: __isset
 
 	HashPosition pos;
@@ -252,32 +257,49 @@ void define_php_methods(VALUE v_obj, zend_class_entry *ce, int is_static)
 	while (zend_hash_get_current_data_ex(&ce->function_table, (void **)&mptr, &pos) == SUCCESS) {
 		int flag = mptr->common.fn_flags;
 		const char *fname = mptr->common.function_name;
+		int is_pass_define = 0;
 
 		if (is_static) {
 			// class method
-			if (strcmp("new", fname)==0) {
-				// new => no define
+			if (0<(flag & ZEND_ACC_STATIC)) {
+				if (strcmp("new", fname)==0) {
+					// new => no define
+					is_pass_define = 1;
 
-			} else if (strcmp("__callStatic", fname)==0) {
-				// __callStatic => method_missing
-				rb_define_singleton_method(v_obj, "method_missing", rb_php_class_call_method_missing, -1);
+				} else if (strcmp("__callStatic", fname)==0) {
+					// __callStatic => method_missing
+					rb_define_singleton_method(v_obj, "method_missing", rb_php_class_call_method_missing, -1);
+				}
 
-			} else if (0<(flag & ZEND_ACC_STATIC)) {
-				// other method
-				rb_define_singleton_method(v_obj, fname, rb_php_class_call, -1);
+				// define
+				if (!is_pass_define) {
+					rb_define_singleton_method(v_obj, fname, rb_php_class_call, -1);
+				}
 			}
 		} else {
 			// instance method
-			if (strcmp("__construct", fname)==0 || strcmp(ce->name, fname)==0) {
-				// __construct => no define
+			if (0==(flag & ZEND_ACC_STATIC)) {
+				if (strcmp("__construct", fname)==0 || strcmp(ce->name, fname)==0) {
+					// __construct => no define
+					is_pass_define = 1;
 
-			} else if (strcmp("__call", fname)==0) {
-				// __call => method_missing
-				rb_define_singleton_method(v_obj, "method_missing", rb_php_object_call_method_missing, -1);
+				} else if (strcmp("__call", fname)==0) {
+					// __call => method_missing
+					rb_define_singleton_method(v_obj, "method_missing", rb_php_object_call_method_missing, -1);
 
-			} else if (0==(flag & ZEND_ACC_STATIC)) {
+				} else if (strcmp("__get", fname)==0) {
+					// __get => method_missing
+					rb_define_singleton_method(v_obj, "method_missing", rb_php_object_call_method_missing, -1);
+
+				} else if (strcmp("__set", fname)==0) {
+					// __set => method_missing
+					rb_define_singleton_method(v_obj, "method_missing", rb_php_object_call_method_missing, -1);
+				}
+
 				// other method
-				rb_define_singleton_method(v_obj, fname, rb_php_object_call, -1);
+				if (!is_pass_define) {
+					rb_define_singleton_method(v_obj, fname, rb_php_object_call, -1);
+				}
 			}
 		}
 
@@ -1001,11 +1023,33 @@ VALUE rb_php_object_call_method_missing(int argc, VALUE *argv, VALUE self)
 	zend_class_entry *ce = get_zend_class_entry(self);
 	zval *zobj = get_zval(self);
 
-	VALUE name, args;
-	rb_scan_args(argc, argv, "1*", &name, &args);
-	VALUE argv2[2] = {name, args};
+	VALUE call_method = rb_str_new2("__call");
+	if (has_zend_function(ce, call_method)) {
+		// __call
+		VALUE name, args;
+		rb_scan_args(argc, argv, "1*", &name, &args);
+		name = rb_str_new2(rb_id2name(SYM2ID(name)));
+		VALUE argv2[2] = {name, args};
 
-	return call_php_method_bridge(ce, zobj, rb_str_new2("__call"), 2, argv2);
+		return call_php_method_bridge(ce, zobj, call_method, 2, argv2);
+	} else {
+		// accessor
+		VALUE name, val;
+		rb_scan_args(argc, argv, "11", &name, &val);
+		name = rb_str_new2(rb_id2name(SYM2ID(name)));
+		VALUE argv2[2] = {name, val};
+
+		VALUE is_setter = rb_funcall(name, rb_intern("end_with?"), 1, rb_str_new2("="));
+		if (is_setter) {
+			// __set
+			rb_funcall(name, rb_intern("gsub!"), 2, rb_str_new2("="), rb_str_new2(""));
+			return call_php_method_bridge(ce, zobj, rb_str_new2("__set"), 2, argv2);
+		} else {
+			// __get
+			return call_php_method_bridge(ce, zobj, rb_str_new2("__get"), 1, argv2);
+		}
+	}
+	return Qnil;
 }
 
 
