@@ -220,7 +220,7 @@ void define_php_properties(VALUE v_obj, zend_class_entry *ce, int is_static)
 	while (zend_hash_get_current_data_ex(&ce->properties_info, (void **) &prop, &pos) == SUCCESS) {
 		int flag = prop->flags;
 		const char *getter_name = prop->name;
-		char *setter_name = malloc(prop->name_length+ 1);
+		char *setter_name = malloc(prop->name_length + 2);
 		sprintf(setter_name, "%s=", getter_name);
 
 		if (is_static) {
