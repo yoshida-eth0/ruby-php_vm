@@ -351,8 +351,6 @@ int call_php_method(zend_class_entry *ce, zval *obj, zend_function *mptr, int ar
 	zend_try {
 		result = zend_call_function(&fci, &fcc TSRMLS_CC);
 	} zend_catch {
-		// EG(exception) is NULL... Why??
-		//printf("call_php_method exception: %p\n", EG(exception));
 	} zend_end_try();
 
 	// reference variable
@@ -545,7 +543,7 @@ VALUE rb_php_vm_get_output_handler(VALUE cls)
 
 VALUE rb_php_vm_set_output_handler(VALUE cls, VALUE proc)
 {
-	if (proc!=Qnil && !rb_obj_is_proc(proc)) {
+	if (proc!=Qnil && !rb_obj_is_kind_of(proc, rb_cProc)) {
 		rb_raise(rb_eArgError, "proc is not proc object");
 	}
 	rb_cv_set(rb_mPHPVM, "@@output_handler", proc);
@@ -559,7 +557,7 @@ VALUE rb_php_vm_get_error_handler(VALUE cls)
 
 VALUE rb_php_vm_set_error_handler(VALUE cls, VALUE proc)
 {
-	if (proc!=Qnil && !rb_obj_is_proc(proc)) {
+	if (proc!=Qnil && !rb_obj_is_kind_of(proc, rb_cProc)) {
 		rb_raise(rb_eArgError, "proc is not proc object");
 	}
 	rb_cv_set(rb_mPHPVM, "@@error_handler", proc);
@@ -1072,7 +1070,7 @@ VALUE rb_php_error_reporting_initialize(int argc, VALUE *argv, VALUE self)
 	VALUE file = Qnil;
 	VALUE line = Qnil;
 
-	if (argc==1 &&TYPE( argv[0])==T_STRING) {
+	if (argc==1 && TYPE(argv[0])==T_STRING) {
 		log_message = argv[0];
 		VALUE re_str = rb_str_new2("^PHP ([^:]+?)(?: error)?: {0,2}(.+) in (.+) on line (\\d+)$");
 		VALUE re_option = rb_const_get(rb_cRegexp, rb_intern("MULTILINE"));
