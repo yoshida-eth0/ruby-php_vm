@@ -20,7 +20,7 @@ VALUE rb_ePHPErrorReporting;
 static int php_embed_output_handler(const char *str, unsigned int str_length TSRMLS_DC)
 {
 	VALUE proc = rb_cv_get(rb_mPHPVM, "@@output_handler");
-	if (rb_obj_is_proc(proc)) {
+	if (rb_obj_is_kind_of(proc, rb_cProc)) {
 		VALUE args = rb_ary_new();
 		rb_ary_push(args, rb_str_new(str, str_length));
 		rb_proc_call(proc, args);
@@ -35,7 +35,7 @@ static void php_embed_error_handler(char *message)
 {
 	VALUE proc = rb_cv_get(rb_mPHPVM, "@@error_handler");
 	VALUE report = rb_exc_new2(rb_ePHPErrorReporting, message);
-	if (rb_obj_is_proc(proc)) {
+	if (rb_obj_is_kind_of(proc, rb_cProc)) {
 		VALUE args = rb_ary_new();
 		rb_ary_push(args, report);
 		rb_proc_call(proc, args);
