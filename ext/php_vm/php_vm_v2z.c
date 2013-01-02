@@ -10,8 +10,7 @@ static void value_to_zval_array(VALUE v, zval *z)
 	long i;
 	for (i=0; i<RARRAY_LEN(v); i++) {
 		zval *new_var;
-		MAKE_STD_ZVAL(new_var);
-		value_to_zval(RARRAY_PTR(v)[i], new_var);
+		value_to_zval(RARRAY_PTR(v)[i], &new_var);
 
 		zend_hash_next_index_insert(Z_ARRVAL_P(z), &new_var, sizeof(zval *), NULL);
 	}
@@ -37,55 +36,61 @@ static void value_to_zval_hash(VALUE v, zval *z)
 		v_key = rb_obj_as_string(v_key);
 
 		zval *z_value;
-		MAKE_STD_ZVAL(z_value);
-		value_to_zval(RARRAY_PTR(v_arr)[i+1], z_value);
+		value_to_zval(RARRAY_PTR(v_arr)[i+1], &z_value);
 
 		add_assoc_zval_ex(z, RSTRING_PTR(v_key), RSTRING_LEN(v_key)+1, z_value);
 	}
 }
 
 
-void value_to_zval(VALUE v, zval *z)
+void value_to_zval(VALUE v, zval **z)
 {
 	switch (TYPE(v)) {
 		// nil
 		case T_NIL:
-			ZVAL_NULL(z);
+			MAKE_STD_ZVAL(*z);
+			ZVAL_NULL(*z);
 			break;
 		// bool
 		case T_TRUE:
-			ZVAL_TRUE(z);
+			MAKE_STD_ZVAL(*z);
+			ZVAL_TRUE(*z);
 			break;
 		case T_FALSE:
-			ZVAL_FALSE(z);
+			MAKE_STD_ZVAL(*z);
+			ZVAL_FALSE(*z);
 			break;
 		// number
 		case T_FIXNUM:
-			ZVAL_LONG(z, NUM2LONG(v));
+			MAKE_STD_ZVAL(*z);
+			ZVAL_LONG(*z, NUM2LONG(v));
 			break;
 		case T_FLOAT:
-			ZVAL_DOUBLE(z, RFLOAT_VALUE(v));
+			MAKE_STD_ZVAL(*z);
+			ZVAL_DOUBLE(*z, RFLOAT_VALUE(v));
 			break;
 		// array
 		case T_ARRAY:
-			value_to_zval_array(v, z);
+			MAKE_STD_ZVAL(*z);
+			value_to_zval_array(v, *z);
 			break;
 		// hash
 		case T_HASH:
-			value_to_zval_hash(v, z);
+			MAKE_STD_ZVAL(*z);
+			value_to_zval_hash(v, *z);
 			break;
 		// object string
 		default:{
 			zval *resource_zobj = get_zval(v);
 			if (resource_zobj) {
 				// php native resource
-				//zval_ptr_dtor(&z);
-				zval_dtor(z);
-				*z = *resource_zobj;
+				*z = resource_zobj;
+				Z_ADDREF_PP(z);
 			} else {
 				// other to_s
 				v = rb_obj_as_string(v);
-				ZVAL_STRING(z, RSTRING_PTR(v), 1);
+				MAKE_STD_ZVAL(*z);
+				ZVAL_STRING(*z, RSTRING_PTR(v), 1);
 			}
 		}
 	}

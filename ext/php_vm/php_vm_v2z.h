@@ -4,6 +4,6 @@
 #include <ruby.h>
 #include <sapi/embed/php_embed.h>
 
-extern void value_to_zval(VALUE v, zval *z);
+extern void value_to_zval(VALUE v, zval **z);
 
 #endif

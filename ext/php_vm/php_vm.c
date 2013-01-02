@@ -363,8 +363,7 @@ int call_php_method(zend_class_entry *ce, zval *obj, zend_function *mptr, int ar
 	long i;
 	for (i=0; i<argc; i++) {
 		zval *new_var;
-		MAKE_STD_ZVAL(new_var);
-		value_to_zval(v_argv[i], new_var);
+		value_to_zval(v_argv[i], &new_var);
 
 		zend_hash_next_index_insert(Z_ARRVAL_P(z_args), &new_var, sizeof(zval *), NULL);
 	}
@@ -472,8 +471,7 @@ VALUE call_php_method_name_bridge(zend_class_entry *ce, zval *obj, VALUE callee,
 		if (is_setter) {
 			// setter
 			rb_funcall(callee, rb_intern("gsub!"), 2, rb_str_new2("="), rb_str_new2(""));
-			MAKE_STD_ZVAL(z_val);
-			value_to_zval(argv[0], z_val);
+			value_to_zval(argv[0], &z_val);
 
 			if (obj) {
 				// instance
