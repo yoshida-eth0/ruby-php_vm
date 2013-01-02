@@ -38,7 +38,8 @@ extern int call_php_method(zend_class_entry *ce, zval *obj, zend_function *mptr,
 
 // Ruby
 extern VALUE get_callee_name();
-extern VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, VALUE callee, int argc, VALUE *argv);
+extern VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, zend_function *mptr, int argc, VALUE *argv);
+extern VALUE call_php_method_name_bridge(zend_class_entry *ce, zval *obj, VALUE callee, int argc, VALUE *argv);
 extern void value_copy(VALUE dst, VALUE src);
 
 // PHP Native resource
@@ -77,6 +78,7 @@ extern VALUE rb_php_class_new(int argc, VALUE *argv, VALUE self);
 extern VALUE rb_php_class_getter(VALUE self);
 extern VALUE rb_php_class_setter(VALUE self, VALUE value);
 extern VALUE rb_php_class_call(int argc, VALUE *argv, VALUE self);
+extern VALUE rb_php_class_call_magic___callstatic(VALUE self, VALUE name, VALUE args);
 extern VALUE rb_php_class_call_method_missing(int argc, VALUE *argv, VALUE self);
 
 // class PHPVM::PHPObject
@@ -85,6 +87,13 @@ extern VALUE rb_php_object_php_class(VALUE self);
 extern VALUE rb_php_object_getter(VALUE self);
 extern VALUE rb_php_object_setter(VALUE self, VALUE value);
 extern VALUE rb_php_object_call(int argc, VALUE *argv, VALUE self);
+extern VALUE rb_php_object_call_magic_clone(VALUE self);
+extern VALUE rb_php_object_call_magic___get(VALUE self, VALUE name);
+extern VALUE rb_php_object_call_magic___set(VALUE self, VALUE name, VALUE arg);
+extern VALUE rb_php_object_call_magic___unset(VALUE self, VALUE name);
+extern VALUE rb_php_object_call_magic___isset(VALUE self, VALUE name);
+extern VALUE rb_php_object_call_magic___call(VALUE self, VALUE name, VALUE args);
+extern VALUE rb_php_object_call_magic___tostring(VALUE self);
 extern VALUE rb_php_object_call_method_missing(int argc, VALUE *argv, VALUE self);
 
 // module

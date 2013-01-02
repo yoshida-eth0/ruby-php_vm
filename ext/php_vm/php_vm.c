@@ -245,9 +245,6 @@ void define_php_properties(VALUE v_obj, zend_class_entry *ce, int is_static)
 void define_php_methods(VALUE v_obj, zend_class_entry *ce, int is_static)
 {
 	// TODO: access scope
-	// TODO: __toString
-	// TODO: __clone
-	// TODO: __isset
 
 	HashPosition pos;
 	zend_function *mptr;
@@ -282,18 +279,6 @@ void define_php_methods(VALUE v_obj, zend_class_entry *ce, int is_static)
 				if (strcmp("__construct", fname)==0 || strcmp(ce->name, fname)==0) {
 					// __construct => no define
 					is_pass_define = 1;
-
-				} else if (strcmp("__call", fname)==0) {
-					// __call => method_missing
-					rb_define_singleton_method(v_obj, "method_missing", rb_php_object_call_method_missing, -1);
-
-				} else if (strcmp("__get", fname)==0) {
-					// __get => method_missing
-					rb_define_singleton_method(v_obj, "method_missing", rb_php_object_call_method_missing, -1);
-
-				} else if (strcmp("__set", fname)==0) {
-					// __set => method_missing
-					rb_define_singleton_method(v_obj, "method_missing", rb_php_object_call_method_missing, -1);
 				}
 
 				// other method
@@ -304,6 +289,45 @@ void define_php_methods(VALUE v_obj, zend_class_entry *ce, int is_static)
 		}
 
 		zend_hash_move_forward_ex(&ce->function_table, &pos);
+	}
+}
+
+void define_php_magic_method(VALUE v_obj, zend_class_entry *ce, int is_static)
+{
+	if (is_static) {
+		// static method
+		if (ce->__callstatic) {
+			rb_define_singleton_method(v_obj, "__callStatic", rb_php_class_call_magic___callstatic, 2);
+			rb_define_singleton_method(v_obj, "method_missing", rb_php_class_call_method_missing, -1);
+		}
+	} else {
+		// instance method
+		if (ce->clone) {
+			rb_define_singleton_method(v_obj, "__clone", rb_php_object_call_magic_clone, 0);
+			rb_define_singleton_method(v_obj, "dup", rb_php_object_call_magic_clone, 0);
+			rb_define_singleton_method(v_obj, "clone", rb_php_object_call_magic_clone, 0);
+		}
+		if (ce->__get) {
+			rb_define_singleton_method(v_obj, "__get", rb_php_object_call_magic___get, 1);
+		}
+		if (ce->__set) {
+			rb_define_singleton_method(v_obj, "__set", rb_php_object_call_magic___set, 2);
+		}
+		if (ce->__unset) {
+			rb_define_singleton_method(v_obj, "__unset", rb_php_object_call_magic___unset, 1);
+		}
+		if (ce->__isset) {
+			rb_define_singleton_method(v_obj, "__isset", rb_php_object_call_magic___isset, 1);
+		}
+		if (ce->__call) {
+			rb_define_singleton_method(v_obj, "__call", rb_php_object_call_magic___call, 2);
+		}
+		if (ce->__tostring) {
+			rb_define_singleton_method(v_obj, "__toString", rb_php_object_call_magic___tostring, 0);
+		}
+		if (ce->__call || ce->__get || ce->__set) {
+			rb_define_singleton_method(v_obj, "method_missing", rb_php_object_call_method_missing, -1);
+		}
 	}
 }
 
@@ -394,7 +418,26 @@ VALUE get_callee_name()
 	return Qnil;
 }
 
-VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, VALUE callee, int argc, VALUE *argv)
+VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, zend_function *mptr, int argc, VALUE *argv)
+{
+	// call
+	zval *z_val;
+	int result = call_php_method(ce, obj, mptr, argc, argv, &z_val TSRMLS_CC);
+
+	// exception
+	if (result==FAILURE) {
+		const char *mname = mptr->common.function_name;
+		char *message = malloc(32+strlen(mname));
+		sprintf(message, "raise exception: %s", mname);
+		VALUE exception = rb_exc_new2(rb_ePHPError, message);
+		free(message);
+		rb_exc_raise(exception);
+	}
+
+	return zval_to_value(z_val);
+}
+
+VALUE call_php_method_name_bridge(zend_class_entry *ce, zval *obj, VALUE callee, int argc, VALUE *argv)
 {
 	TSRMLS_FETCH();
 
@@ -761,7 +804,7 @@ VALUE rb_php_vm_define_global(VALUE cls)
 VALUE rb_php_global_function_call(int argc, VALUE *argv, VALUE self)
 {
 	VALUE callee = get_callee_name();
-	return call_php_method_bridge(NULL, NULL, callee, argc, argv);
+	return call_php_method_name_bridge(NULL, NULL, callee, argc, argv);
 }
 
 VALUE rb_php_global_class_call(VALUE self)
@@ -826,7 +869,7 @@ VALUE rb_php_global_echo(int argc, VALUE *argv, VALUE cls)
 	for (i=0; i<argc; i++) {
 		argv2[i+1] = argv[i];
 	}
-	call_php_method_bridge(NULL, NULL, rb_str_new2("printf"), argc+1, argv2);
+	call_php_method_name_bridge(NULL, NULL, rb_str_new2("printf"), argc+1, argv2);
 
 	// release
 	free(format);
@@ -900,6 +943,7 @@ VALUE rb_php_class_initialize(VALUE self, VALUE v_name)
 	// define php static properties and methods
 	define_php_properties(self, *ce, 1);
 	define_php_methods(self, *ce, 1);
+	define_php_magic_method(self, *ce, 1);
 
 	return self;
 }
@@ -927,6 +971,7 @@ VALUE rb_php_class_new(int argc, VALUE *argv, VALUE self)
 	// define php instance properties and methods
 	define_php_properties(obj, ce, 0);
 	define_php_methods(obj, ce, 0);
+	define_php_magic_method(obj, ce, 0);
 
 	return obj;
 }
@@ -935,21 +980,30 @@ VALUE rb_php_class_getter(VALUE self)
 {
 	zend_class_entry *ce = get_zend_class_entry(self);
 	VALUE callee = get_callee_name();
-	return call_php_method_bridge(ce, NULL, callee, 0, NULL);
+	return call_php_method_name_bridge(ce, NULL, callee, 0, NULL);
 }
 
 VALUE rb_php_class_setter(VALUE self, VALUE value)
 {
 	zend_class_entry *ce = get_zend_class_entry(self);
 	VALUE callee = get_callee_name();
-	return call_php_method_bridge(ce, NULL, callee, 1, &value);
+	return call_php_method_name_bridge(ce, NULL, callee, 1, &value);
 }
 
 VALUE rb_php_class_call(int argc, VALUE *argv, VALUE self)
 {
 	zend_class_entry *ce = get_zend_class_entry(self);
 	VALUE callee = get_callee_name();
-	return call_php_method_bridge(ce, NULL, callee, argc, argv);
+	return call_php_method_name_bridge(ce, NULL, callee, argc, argv);
+}
+
+VALUE rb_php_class_call_magic___callstatic(VALUE self, VALUE name, VALUE args)
+{
+	zend_class_entry *ce = get_zend_class_entry(self);
+	zval *zobj = get_zval(self);
+	VALUE argv[2] = {name, args};
+
+	return call_php_method_bridge(ce, zobj, ce->__callstatic, 2, argv);
 }
 
 VALUE rb_php_class_call_method_missing(int argc, VALUE *argv, VALUE self)
@@ -960,7 +1014,7 @@ VALUE rb_php_class_call_method_missing(int argc, VALUE *argv, VALUE self)
 	rb_scan_args(argc, argv, "1*", &name, &args);
 	VALUE argv2[2] = {name, args};
 
-	return call_php_method_bridge(ce, NULL, rb_str_new2("__callStatic"), 2, argv2);
+	return call_php_method_bridge(ce, NULL, ce->__callstatic, 2, argv2);
 }
 
 
@@ -997,7 +1051,7 @@ VALUE rb_php_object_getter(VALUE self)
 	zend_class_entry *ce = get_zend_class_entry(self);
 	zval *zobj = get_zval(self);
 	VALUE callee = get_callee_name();
-	return call_php_method_bridge(ce, zobj, callee, 0, NULL);
+	return call_php_method_name_bridge(ce, zobj, callee, 0, NULL);
 }
 
 VALUE rb_php_object_setter(VALUE self, VALUE value)
@@ -1005,7 +1059,7 @@ VALUE rb_php_object_setter(VALUE self, VALUE value)
 	zend_class_entry *ce = get_zend_class_entry(self);
 	zval *zobj = get_zval(self);
 	VALUE callee = get_callee_name();
-	return call_php_method_bridge(ce, zobj, callee, 1, &value);
+	return call_php_method_name_bridge(ce, zobj, callee, 1, &value);
 }
 
 VALUE rb_php_object_call(int argc, VALUE *argv, VALUE self)
@@ -1013,7 +1067,73 @@ VALUE rb_php_object_call(int argc, VALUE *argv, VALUE self)
 	zend_class_entry *ce = get_zend_class_entry(self);
 	zval *zobj = get_zval(self);
 	VALUE callee = get_callee_name();
-	return call_php_method_bridge(ce, zobj, callee, argc, argv);
+	return call_php_method_name_bridge(ce, zobj, callee, argc, argv);
+}
+
+VALUE rb_php_object_call_magic_clone(VALUE self)
+{
+	zval *zobj = get_zval(self);
+
+	zend_object_clone_obj_t clone_call =  Z_OBJ_HT_P(zobj)->clone_obj;
+	zval *retval;
+
+	ALLOC_ZVAL(retval);
+	Z_OBJVAL_P(retval) = clone_call(zobj TSRMLS_CC);
+	Z_TYPE_P(retval) = IS_OBJECT;
+	Z_SET_REFCOUNT_P(retval, 1);
+	Z_SET_ISREF_P(retval);
+
+	return zval_to_value(retval);
+}
+
+VALUE rb_php_object_call_magic___get(VALUE self, VALUE name)
+{
+	zend_class_entry *ce = get_zend_class_entry(self);
+	zval *zobj = get_zval(self);
+
+	return call_php_method_bridge(ce, zobj, ce->__get, 1, &name);
+}
+
+VALUE rb_php_object_call_magic___set(VALUE self, VALUE name, VALUE arg)
+{
+	zend_class_entry *ce = get_zend_class_entry(self);
+	zval *zobj = get_zval(self);
+	VALUE args[2] = {name, arg};
+
+	return call_php_method_bridge(ce, zobj, ce->__set, 2, args);
+}
+
+VALUE rb_php_object_call_magic___unset(VALUE self, VALUE name)
+{
+	zend_class_entry *ce = get_zend_class_entry(self);
+	zval *zobj = get_zval(self);
+
+	return call_php_method_bridge(ce, zobj, ce->__unset, 1, &name);
+}
+
+VALUE rb_php_object_call_magic___isset(VALUE self, VALUE name)
+{
+	zend_class_entry *ce = get_zend_class_entry(self);
+	zval *zobj = get_zval(self);
+
+	return call_php_method_bridge(ce, zobj, ce->__isset, 1, &name);
+}
+
+VALUE rb_php_object_call_magic___call(VALUE self, VALUE name, VALUE args)
+{
+	zend_class_entry *ce = get_zend_class_entry(self);
+	zval *zobj = get_zval(self);
+	VALUE argv[2] = {name, args};
+
+	return call_php_method_bridge(ce, zobj, ce->__call, 2, argv);
+}
+
+VALUE rb_php_object_call_magic___tostring(VALUE self)
+{
+	zend_class_entry *ce = get_zend_class_entry(self);
+	zval *zobj = get_zval(self);
+
+	return call_php_method_bridge(ce, zobj, ce->__tostring, 0, NULL);
 }
 
 VALUE rb_php_object_call_method_missing(int argc, VALUE *argv, VALUE self)
@@ -1021,15 +1141,14 @@ VALUE rb_php_object_call_method_missing(int argc, VALUE *argv, VALUE self)
 	zend_class_entry *ce = get_zend_class_entry(self);
 	zval *zobj = get_zval(self);
 
-	VALUE call_method = rb_str_new2("__call");
-	if (has_zend_function(ce, call_method)) {
+	if (ce->__call) {
 		// __call
 		VALUE name, args;
 		rb_scan_args(argc, argv, "1*", &name, &args);
 		name = rb_str_new2(rb_id2name(SYM2ID(name)));
 		VALUE argv2[2] = {name, args};
 
-		return call_php_method_bridge(ce, zobj, call_method, 2, argv2);
+		return call_php_method_bridge(ce, zobj, ce->__call, 2, argv2);
 	} else {
 		// accessor
 		VALUE name, val;
@@ -1040,11 +1159,15 @@ VALUE rb_php_object_call_method_missing(int argc, VALUE *argv, VALUE self)
 		VALUE is_setter = rb_funcall(name, rb_intern("end_with?"), 1, rb_str_new2("="));
 		if (is_setter) {
 			// __set
-			rb_funcall(name, rb_intern("gsub!"), 2, rb_str_new2("="), rb_str_new2(""));
-			return call_php_method_bridge(ce, zobj, rb_str_new2("__set"), 2, argv2);
+			if (ce->__set) {
+				rb_funcall(name, rb_intern("gsub!"), 2, rb_str_new2("="), rb_str_new2(""));
+				return call_php_method_bridge(ce, zobj, ce->__set, 2, argv2);
+			}
 		} else {
 			// __get
-			return call_php_method_bridge(ce, zobj, rb_str_new2("__get"), 1, argv2);
+			if (ce->__get) {
+				return call_php_method_bridge(ce, zobj, ce->__get, 1, argv2);
+			}
 		}
 	}
 	return Qnil;
