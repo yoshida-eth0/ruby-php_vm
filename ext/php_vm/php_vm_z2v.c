@@ -87,6 +87,7 @@ static VALUE zval_to_value_object(zval *z)
 
 	// class
 	VALUE class = rb_php_class_get(rb_cPHPClass, v_name);
+	zend_class_entry *ce = get_zend_class_entry(class);
 
 	// object
 	VALUE obj = Qnil;
@@ -109,10 +110,15 @@ static VALUE zval_to_value_object(zval *z)
 
 	// resource
 	PHPNativeResource *p = ALLOC(PHPNativeResource);
-	p->ce = get_zend_class_entry(class);
+	p->ce = ce;
 	p->zobj = z;
 	VALUE resource = Data_Wrap_Struct(CLASS_OF(obj), 0, php_native_resource_delete, p);
 	rb_iv_set(obj, "php_native_resource", resource);
+
+	// define php instance properties and methods
+	define_php_properties(obj, ce, 0);
+	define_php_methods(obj, ce, 0);
+	define_php_magic_method(obj, ce, z);
 
 	return obj;
 }

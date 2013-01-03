@@ -275,9 +275,9 @@ void define_php_methods(VALUE v_obj, zend_class_entry *ce, int is_static)
 	}
 }
 
-void define_php_magic_method(VALUE v_obj, zend_class_entry *ce, int is_static)
+void define_php_magic_method(VALUE v_obj, zend_class_entry *ce, zval *zobj)
 {
-	if (is_static) {
+	if (!zobj) {
 		// static method
 		if (ce->__callstatic) {
 			rb_define_singleton_method(v_obj, "__callStatic", rb_php_class_call_magic___callstatic, 2);
@@ -285,21 +285,27 @@ void define_php_magic_method(VALUE v_obj, zend_class_entry *ce, int is_static)
 		}
 	} else {
 		// instance method
+		const zend_object_handlers *h = Z_OBJ_HT_P(zobj);
+		int has_get = h->read_property!=std_object_handlers.read_property || (h->read_property && ce->__get);
+		int has_set = h->write_property!=std_object_handlers.write_property || (h->write_property &&ce->__set);
+		int has_unset = h->unset_property!=std_object_handlers.unset_property || (h->unset_property && ce->__unset);
+		int has_isset = h->has_property!=std_object_handlers.has_property || (h->has_property && ce->__isset);
+
 		if (ce->clone) {
 			rb_define_singleton_method(v_obj, "__clone", rb_php_object_call_magic_clone, 0);
 			rb_define_singleton_method(v_obj, "dup", rb_php_object_call_magic_clone, 0);
 			rb_define_singleton_method(v_obj, "clone", rb_php_object_call_magic_clone, 0);
 		}
-		if (ce->__get) {
+		if (has_get) {
 			rb_define_singleton_method(v_obj, "__get", rb_php_object_call_magic___get, 1);
 		}
-		if (ce->__set) {
+		if (has_set) {
 			rb_define_singleton_method(v_obj, "__set", rb_php_object_call_magic___set, 2);
 		}
-		if (ce->__unset) {
+		if (has_unset) {
 			rb_define_singleton_method(v_obj, "__unset", rb_php_object_call_magic___unset, 1);
 		}
-		if (ce->__isset) {
+		if (has_isset) {
 			rb_define_singleton_method(v_obj, "__isset", rb_php_object_call_magic___isset, 1);
 		}
 		if (ce->__call) {
@@ -307,9 +313,10 @@ void define_php_magic_method(VALUE v_obj, zend_class_entry *ce, int is_static)
 		}
 		if (ce->__tostring) {
 			rb_define_singleton_method(v_obj, "__toString", rb_php_object_call_magic___tostring, 0);
-			rb_define_singleton_method(v_obj, "to_str", rb_php_object_call_magic___tostring, 0);
+			rb_define_singleton_method(v_obj, "to_s", rb_php_object_call_magic___tostring, 0);
 		}
-		if (ce->__call || ce->__get || ce->__set) {
+
+		if (has_get || has_set || ce->__call) {
 			rb_define_singleton_method(v_obj, "method_missing", rb_php_object_call_method_missing, -1);
 		}
 	}
@@ -409,7 +416,13 @@ VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, zend_function *mpt
 
 	// exception
 	if (result==FAILURE) {
-		rb_raise(rb_ePHPError, "raise exception: %s", mptr->common.function_name);
+		if (EG(exception)) {
+			VALUE exception = zval_to_value(EG(exception));
+			EG(exception) = NULL;
+			rb_exc_raise(exception);
+		} else {
+			rb_raise(rb_ePHPError, "raise exception: %s", mptr->common.function_name);
+		}
 	}
 
 	return zval_to_value(z_val);
@@ -436,7 +449,13 @@ VALUE call_php_method_name_bridge(zend_class_entry *ce, zval *obj, VALUE callee,
 
 		// exception
 		if (result==FAILURE) {
-			rb_raise(rb_ePHPError, "raise exception: %s", RSTRING_PTR(callee));
+			if (EG(exception)) {
+				VALUE exception = zval_to_value(EG(exception));
+				EG(exception) = NULL;
+				rb_exc_raise(exception);
+			} else {
+				rb_raise(rb_ePHPError, "raise exception: %s", RSTRING_PTR(callee));
+			}
 		}
 	} else {
 		// accessor
@@ -910,7 +929,7 @@ VALUE rb_php_class_initialize(VALUE self, VALUE v_name)
 	// define php static properties and methods
 	define_php_properties(self, *ce, 1);
 	define_php_methods(self, *ce, 1);
-	define_php_magic_method(self, *ce, 1);
+	define_php_magic_method(self, *ce, NULL);
 
 	return self;
 }
@@ -934,11 +953,6 @@ VALUE rb_php_class_new(int argc, VALUE *argv, VALUE self)
 		obj = rb_obj_alloc(rb_cPHPObject);
 	}
 	rb_php_object_initialize(obj, self, args);
-
-	// define php instance properties and methods
-	define_php_properties(obj, ce, 0);
-	define_php_methods(obj, ce, 0);
-	define_php_magic_method(obj, ce, 0);
 
 	return obj;
 }
@@ -1004,6 +1018,11 @@ VALUE rb_php_object_initialize(VALUE self, VALUE class, VALUE args)
 	p->zobj = z_obj;
 	VALUE resource = Data_Wrap_Struct(CLASS_OF(self), 0, php_native_resource_delete, p);
 	rb_iv_set(self, "php_native_resource", resource);
+
+	// define php instance properties and methods
+	define_php_properties(self, ce, 0);
+	define_php_methods(self, ce, 0);
+	define_php_magic_method(self, ce, z_obj);
 
 	return self;
 }
