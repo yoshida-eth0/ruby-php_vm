@@ -70,8 +70,7 @@ void php_eval_string(char *code, int code_len TSRMLS_DC)
 
 	// syntax error
 	if (syntax_error) {
-		VALUE exception = rb_exc_new2(rb_ePHPSyntaxError, "Syntax error");
-		rb_exc_raise(exception);
+		rb_raise(rb_ePHPSyntaxError, "Syntax error");
 	}
 
 	// exception
@@ -86,11 +85,7 @@ void php_eval_string(char *code, int code_len TSRMLS_DC)
 		int exit_status = EG(exit_status);
 		EG(exit_status) = 0;
 
-		char message[32];
-		sprintf(message, "exit status error: %d", exit_status);
-
-		VALUE exception = rb_exc_new2(rb_ePHPError, message);
-		rb_exc_raise(exception);
+		rb_raise(rb_ePHPError, "exit status error: %d", exit_status);
 	}
 }
 
@@ -171,11 +166,7 @@ int new_php_object(zend_class_entry *ce, VALUE v_args, zval *retval)
 		// defined constructor
 /*
 		if (!(ce->constructor->common.fn_flags & ZEND_ACC_PUBLIC)) {
-			char *message = malloc(50+strlen(ce->name));
-			sprintf(message, "Access to non-public constructor of class %s", ce->name);
-			VALUE v_exception = rb_exc_new2(rb_ePHPError, message);
-			free(message);
-			rb_exc_raise(v_exception);
+			rb_raise(rb_ePHPError, "Access to non-public constructor of class %s", ce->name);
 		}
 */
 
@@ -187,11 +178,7 @@ int new_php_object(zend_class_entry *ce, VALUE v_args, zval *retval)
 
 		// error
 		if (result==FAILURE) {
-			char *message = malloc(40+strlen(ce->name));
-			sprintf(message, "Invocation of %s's constructor failed", ce->name);
-			VALUE v_exception = rb_exc_new2(rb_ePHPError, message);
-			free(message);
-			rb_exc_raise(v_exception);
+			rb_raise(rb_ePHPError, "Invocation of %s's constructor failed", ce->name);
 		}
 
 	} else if (!RARRAY_LEN(v_args)) {
@@ -201,11 +188,7 @@ int new_php_object(zend_class_entry *ce, VALUE v_args, zval *retval)
 
 	} else {
 		// undefine constructor, has args
-		char *message = malloc(90+strlen(ce->name));
-		sprintf(message, "Class %s does not have a constructor, so you cannot pass any constructor arguments", ce->name);
-		VALUE v_exception = rb_exc_new2(rb_ePHPError, message);
-		free(message);
-		rb_exc_raise(v_exception);
+		rb_raise(rb_ePHPError, "Class %s does not have a constructor, so you cannot pass any constructor arguments", ce->name);
 	}
 	return result;
 }
@@ -324,6 +307,7 @@ void define_php_magic_method(VALUE v_obj, zend_class_entry *ce, int is_static)
 		}
 		if (ce->__tostring) {
 			rb_define_singleton_method(v_obj, "__toString", rb_php_object_call_magic___tostring, 0);
+			rb_define_singleton_method(v_obj, "to_str", rb_php_object_call_magic___tostring, 0);
 		}
 		if (ce->__call || ce->__get || ce->__set) {
 			rb_define_singleton_method(v_obj, "method_missing", rb_php_object_call_method_missing, -1);
@@ -425,12 +409,7 @@ VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, zend_function *mpt
 
 	// exception
 	if (result==FAILURE) {
-		const char *mname = mptr->common.function_name;
-		char *message = malloc(32+strlen(mname));
-		sprintf(message, "raise exception: %s", mname);
-		VALUE exception = rb_exc_new2(rb_ePHPError, message);
-		free(message);
-		rb_exc_raise(exception);
+		rb_raise(rb_ePHPError, "raise exception: %s", mptr->common.function_name);
 	}
 
 	return zval_to_value(z_val);
@@ -442,8 +421,7 @@ VALUE call_php_method_name_bridge(zend_class_entry *ce, zval *obj, VALUE callee,
 
 	// callee
 	if (callee==Qnil) {
-		VALUE exception = rb_exc_new2(rb_ePHPError, "callee is nil");
-		rb_exc_raise(exception);
+		rb_raise(rb_ePHPError, "callee is nil");
 	}
 
 	// method
@@ -458,11 +436,7 @@ VALUE call_php_method_name_bridge(zend_class_entry *ce, zval *obj, VALUE callee,
 
 		// exception
 		if (result==FAILURE) {
-			char *message = malloc(32+RSTRING_LEN(callee));
-			sprintf(message, "raise exception: %s", RSTRING_PTR(callee));
-			VALUE exception = rb_exc_new2(rb_ePHPError, message);
-			free(message);
-			rb_exc_raise(exception);
+			rb_raise(rb_ePHPError, "raise exception: %s", RSTRING_PTR(callee));
 		}
 	} else {
 		// accessor
@@ -849,8 +823,7 @@ VALUE rb_php_global_echo(int argc, VALUE *argv, VALUE cls)
 	int i;
 
 	if (argc==0) {
-		VALUE exception = rb_exc_new2(rb_eArgError, "Too few arguments");
-		rb_exc_raise(exception);
+		rb_raise(rb_eArgError, "Too few arguments");
 	}
 
 	// format
@@ -924,11 +897,7 @@ VALUE rb_php_class_initialize(VALUE self, VALUE v_name)
 
 	// class not found
 	if (!ce) {
-		char *message = malloc(32+RSTRING_LEN(v_name));
-		sprintf(message, "Class is not found: %s", RSTRING_PTR(v_name));
-		VALUE exception = rb_exc_new2(rb_ePHPError, message);
-		free(message);
-		rb_exc_raise(exception);
+		rb_raise(rb_ePHPError, "Class is not found: %s", RSTRING_PTR(v_name));
 	}
 
 	// set resource
@@ -1070,15 +1039,19 @@ VALUE rb_php_object_call(int argc, VALUE *argv, VALUE self)
 
 VALUE rb_php_object_call_magic_clone(VALUE self)
 {
+	TSRMLS_FETCH();
+
 	zval *zobj = get_zval(self);
+	zend_object_clone_obj_t handler = Z_OBJ_HT_P(zobj)->clone_obj;
+	if (!handler) {
+		rb_raise(rb_ePHPError, "clone_obj handler is not defined");
+	}
 
-	zend_object_clone_obj_t clone_call =  Z_OBJ_HT_P(zobj)->clone_obj;
 	zval *retval;
-
 	ALLOC_ZVAL(retval);
-	Z_OBJVAL_P(retval) = clone_call(zobj TSRMLS_CC);
+	Z_OBJVAL_P(retval) = handler(zobj TSRMLS_CC);
 	Z_TYPE_P(retval) = IS_OBJECT;
-	Z_SET_REFCOUNT_P(retval, 1);
+	Z_SET_REFCOUNT_P(retval, 0);
 	Z_SET_ISREF_P(retval);
 
 	return zval_to_value(retval);
@@ -1086,35 +1059,88 @@ VALUE rb_php_object_call_magic_clone(VALUE self)
 
 VALUE rb_php_object_call_magic___get(VALUE self, VALUE name)
 {
-	zend_class_entry *ce = get_zend_class_entry(self);
-	zval *zobj = get_zval(self);
+	TSRMLS_FETCH();
 
-	return call_php_method_bridge(ce, zobj, ce->__get, 1, &name);
+	zval *zobj = get_zval(self);
+	zend_object_read_property_t handler = Z_OBJ_HT_P(zobj)->read_property;
+	if (!handler) {
+		rb_raise(rb_ePHPError, "read_property handler is not defined");
+	}
+
+	zval *member;
+	MAKE_STD_ZVAL(member);
+	ZVAL_STRING(member, RSTRING_PTR(name), 1);
+
+	zval *retval;
+	retval = handler(zobj, member, BP_VAR_IS, NULL TSRMLS_CC);
+
+	zval_ptr_dtor(&member);
+	return zval_to_value(retval);
 }
 
 VALUE rb_php_object_call_magic___set(VALUE self, VALUE name, VALUE arg)
 {
-	zend_class_entry *ce = get_zend_class_entry(self);
-	zval *zobj = get_zval(self);
-	VALUE args[2] = {name, arg};
+	TSRMLS_FETCH();
 
-	return call_php_method_bridge(ce, zobj, ce->__set, 2, args);
+	zval *zobj = get_zval(self);
+	zend_object_write_property_t handler = Z_OBJ_HT_P(zobj)->write_property;
+	if (!handler) {
+		rb_raise(rb_ePHPError, "write_property handler is not defined");
+	}
+
+	zval *member;
+	MAKE_STD_ZVAL(member);
+	ZVAL_STRING(member, RSTRING_PTR(name), 1);
+
+	zval *z_arg;
+	value_to_zval(arg, &z_arg);
+
+	handler(zobj, member, z_arg, NULL TSRMLS_CC);
+
+	zval_ptr_dtor(&member);
+	zval_ptr_dtor(&z_arg);
+	return Qnil;
 }
 
 VALUE rb_php_object_call_magic___unset(VALUE self, VALUE name)
 {
-	zend_class_entry *ce = get_zend_class_entry(self);
-	zval *zobj = get_zval(self);
+	TSRMLS_FETCH();
 
-	return call_php_method_bridge(ce, zobj, ce->__unset, 1, &name);
+	zval *zobj = get_zval(self);
+	zend_object_unset_property_t handler = Z_OBJ_HT_P(zobj)->unset_property;
+	if (!handler) {
+		rb_raise(rb_ePHPError, "unset_property handler is not defined");
+	}
+
+	zval *member;
+	MAKE_STD_ZVAL(member);
+	ZVAL_STRING(member, RSTRING_PTR(name), 1);
+
+	handler(zobj, member, NULL TSRMLS_CC);
+
+	zval_ptr_dtor(&member);
+	return Qnil;
 }
 
 VALUE rb_php_object_call_magic___isset(VALUE self, VALUE name)
 {
-	zend_class_entry *ce = get_zend_class_entry(self);
-	zval *zobj = get_zval(self);
+	TSRMLS_FETCH();
 
-	return call_php_method_bridge(ce, zobj, ce->__isset, 1, &name);
+	zval *zobj = get_zval(self);
+	zend_object_has_property_t handler = Z_OBJ_HT_P(zobj)->has_property;
+	if (!handler) {
+		rb_raise(rb_ePHPError, "has_property handler is not defined");
+	}
+
+	zval *member;
+	MAKE_STD_ZVAL(member);
+	ZVAL_STRING(member, RSTRING_PTR(name), 1);
+
+	int has;
+	has = handler(zobj, member, 0, NULL TSRMLS_CC);
+
+	zval_ptr_dtor(&member);
+	return has ? Qtrue : Qfalse;
 }
 
 VALUE rb_php_object_call_magic___call(VALUE self, VALUE name, VALUE args)
@@ -1122,6 +1148,10 @@ VALUE rb_php_object_call_magic___call(VALUE self, VALUE name, VALUE args)
 	zend_class_entry *ce = get_zend_class_entry(self);
 	zval *zobj = get_zval(self);
 	VALUE argv[2] = {name, args};
+
+	if (args==Qnil || TYPE(args)!=T_ARRAY) {
+		rb_raise(rb_eArgError, "args is not array");
+	}
 
 	return call_php_method_bridge(ce, zobj, ce->__call, 2, argv);
 }
@@ -1152,20 +1182,15 @@ VALUE rb_php_object_call_method_missing(int argc, VALUE *argv, VALUE self)
 		VALUE name, val;
 		rb_scan_args(argc, argv, "11", &name, &val);
 		name = rb_str_new2(rb_id2name(SYM2ID(name)));
-		VALUE argv2[2] = {name, val};
 
 		VALUE is_setter = rb_funcall(name, rb_intern("end_with?"), 1, rb_str_new2("="));
 		if (is_setter) {
 			// __set
-			if (ce->__set) {
-				rb_funcall(name, rb_intern("gsub!"), 2, rb_str_new2("="), rb_str_new2(""));
-				return call_php_method_bridge(ce, zobj, ce->__set, 2, argv2);
-			}
+			rb_funcall(name, rb_intern("gsub!"), 2, rb_str_new2("="), rb_str_new2(""));
+			return rb_php_object_call_magic___set(self, name, val);
 		} else {
 			// __get
-			if (ce->__get) {
-				return call_php_method_bridge(ce, zobj, ce->__get, 1, argv2);
-			}
+			return rb_php_object_call_magic___get(self, name);
 		}
 	}
 	return Qnil;
