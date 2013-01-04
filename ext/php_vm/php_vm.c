@@ -49,13 +49,11 @@ static void php_embed_error_handler(char *message)
 	}
 }
 
-static zval *global_exception = NULL;
+static zval *g_exception = NULL;
 static void php_vm_exception_hook(zval *ex TSRMLS_DC)
 {
 	// TODO: no use global variable
-	//VALUE exception = zval_to_value(ex);
-	//rb_exc_raise(exception);
-	global_exception = ex;
+	g_exception = ex;
 	EG(exception) = NULL;
 }
 
@@ -181,9 +179,15 @@ int new_php_object(zend_class_entry *ce, VALUE v_args, zval *retval)
 		// call constructor
 		int result = call_php_method(ce, retval, ce->constructor, RARRAY_LEN(v_args), RARRAY_PTR(v_args), &retval TSRMLS_CC);
 
-		// error
+		// exception
 		if (result==FAILURE) {
-			rb_raise(rb_ePHPError, "Invocation of %s's constructor failed", ce->name);
+			if (g_exception) {
+				VALUE exception = zval_to_value(g_exception);
+				g_exception = NULL;
+				rb_exc_raise(exception);
+			} else {
+				rb_raise(rb_ePHPError, "Invocation of %s's constructor failed", ce->name);
+			}
 		}
 
 	} else if (!RARRAY_LEN(v_args)) {
@@ -366,31 +370,36 @@ int call_php_method(zend_class_entry *ce, zval *obj, zend_function *mptr, int ar
 
 	zend_fcall_info_args(&fci, z_args);
 
-	// call method
 	zend_try {
+		// call method
 		result = zend_call_function(&fci, &fcc TSRMLS_CC);
+
+		// reference variable
+		HashPosition pos;
+		zval **arg;
+		zend_arg_info *arg_info = mptr->common.arg_info;
+		zend_hash_internal_pointer_reset_ex(Z_ARRVAL_P(z_args), &pos);
+		for (i=0; i<argc && i<mptr->common.num_args; i++) {
+			if (arg_info->pass_by_reference) {
+				zend_hash_get_current_data_ex(Z_ARRVAL_P(z_args), (void *)&arg, &pos);
+				value_copy(v_argv[i], zval_to_value(*arg));
+			}
+			zend_hash_move_forward_ex(Z_ARRVAL_P(z_args), &pos);
+			arg_info++;
+		}
 	} zend_catch {
 	} zend_end_try();
-
-	// reference variable
-	HashPosition pos;
-	zval **arg;
-	zend_arg_info *arg_info = mptr->common.arg_info;
-	zend_hash_internal_pointer_reset_ex(Z_ARRVAL_P(z_args), &pos);
-	for (i=0; i<argc && i<mptr->common.num_args; i++) {
-		if (arg_info->pass_by_reference) {
-			zend_hash_get_current_data_ex(Z_ARRVAL_P(z_args), (void *)&arg, &pos);
-			value_copy(v_argv[i], zval_to_value(*arg));
-		}
-		zend_hash_move_forward_ex(Z_ARRVAL_P(z_args), &pos);
-		arg_info++;
-	}
 
 	// release
 	for (i=0; i<fci.param_count; i++) {
 		zval_ptr_dtor(fci.params[i]);
 	}
 	zend_fcall_info_args_clear(&fci, 1);
+
+	// result
+	if (g_exception) {
+		result = FAILURE;
+	}
 	return result;
 }
 
@@ -420,12 +429,14 @@ VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, zend_function *mpt
 	int result = call_php_method(ce, obj, mptr, argc, argv, &z_val TSRMLS_CC);
 
 	// exception
-	if (global_exception) {
-		VALUE exception = zval_to_value(global_exception);
-		global_exception = NULL;
-		rb_exc_raise(exception);
-	} else if (result==FAILURE) {
-		rb_raise(rb_ePHPError, "raise exception: %s", mptr->common.function_name);
+	if (result==FAILURE) {
+		if (g_exception) {
+			VALUE exception = zval_to_value(g_exception);
+			g_exception = NULL;
+			rb_exc_raise(exception);
+		} else {
+			rb_raise(rb_ePHPError, "raise exception: %s", mptr->common.function_name);
+		}
 	}
 
 	return zval_to_value(z_val);
@@ -656,6 +667,7 @@ VALUE define_global_constants()
 	zval *z_val;
 	int result = call_php_method(NULL, NULL, mptr, 0, NULL, &z_val TSRMLS_CC);
 	if (result==FAILURE) {
+		g_exception = NULL;
 		return Qfalse;
 	}
 
@@ -709,6 +721,7 @@ VALUE define_global_functions()
 	zval *z_val;
 	int result = call_php_method(NULL, NULL, mptr, 0, NULL, &z_val TSRMLS_CC);
 	if (result==FAILURE) {
+		g_exception = NULL;
 		return Qfalse;
 	}
 
@@ -748,6 +761,7 @@ VALUE define_global_classes()
 	zval *z_val;
 	int result = call_php_method(NULL, NULL, mptr, 0, NULL, &z_val TSRMLS_CC);
 	if (result==FAILURE) {
+		g_exception = NULL;
 		return Qfalse;
 	}
 
