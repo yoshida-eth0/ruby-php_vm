@@ -94,19 +94,17 @@ static VALUE zval_to_value_object(zval *z)
 	if (is_exception_zval(z)) {
 		// exception object
 		zval *z_message = zend_read_property(zend_exception_get_default(TSRMLS_C), z, "message", sizeof("message")-1, 0 TSRMLS_CC);
-
 		obj = rb_exc_new2(rb_ePHPExceptionObject, Z_STRVAL_P(z_message));
-
-		rb_iv_set(obj, "php_class", class);
 	} else {
 		// normal object
 		obj = rb_obj_alloc(rb_cPHPObject);
-
-		rb_iv_set(obj, "php_class", class);
 	}
 
 	// retain
 	Z_ADDREF_P(z);
+
+	// class
+	rb_iv_set(obj, "php_class", class);
 
 	// resource
 	PHPNativeResource *p = ALLOC(PHPNativeResource);

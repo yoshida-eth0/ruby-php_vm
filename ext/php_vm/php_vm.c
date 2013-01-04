@@ -17,6 +17,7 @@ VALUE rb_ePHPErrorReporting;
 
 
 // PHP Embed
+
 static int php_embed_output_handler(const char *str, unsigned int str_length TSRMLS_DC)
 {
 	VALUE proc = rb_cv_get(rb_mPHPVM, "@@output_handler");
@@ -48,10 +49,14 @@ static void php_embed_error_handler(char *message)
 	}
 }
 
+static zval *global_exception = NULL;
 static void php_vm_exception_hook(zval *ex TSRMLS_DC)
 {
-	VALUE exception = zval_to_value(ex);
-	rb_exc_raise(exception);
+	// TODO: no use global variable
+	//VALUE exception = zval_to_value(ex);
+	//rb_exc_raise(exception);
+	global_exception = ex;
+	EG(exception) = NULL;
 }
 
 
@@ -173,7 +178,7 @@ int new_php_object(zend_class_entry *ce, VALUE v_args, zval *retval)
 		// alloc
 		object_init_ex(retval, ce);
 
-		// call
+		// call constructor
 		int result = call_php_method(ce, retval, ce->constructor, RARRAY_LEN(v_args), RARRAY_PTR(v_args), &retval TSRMLS_CC);
 
 		// error
@@ -361,7 +366,7 @@ int call_php_method(zend_class_entry *ce, zval *obj, zend_function *mptr, int ar
 
 	zend_fcall_info_args(&fci, z_args);
 
-	// call
+	// call method
 	zend_try {
 		result = zend_call_function(&fci, &fcc TSRMLS_CC);
 	} zend_catch {
@@ -415,14 +420,12 @@ VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, zend_function *mpt
 	int result = call_php_method(ce, obj, mptr, argc, argv, &z_val TSRMLS_CC);
 
 	// exception
-	if (result==FAILURE) {
-		if (EG(exception)) {
-			VALUE exception = zval_to_value(EG(exception));
-			EG(exception) = NULL;
-			rb_exc_raise(exception);
-		} else {
-			rb_raise(rb_ePHPError, "raise exception: %s", mptr->common.function_name);
-		}
+	if (global_exception) {
+		VALUE exception = zval_to_value(global_exception);
+		global_exception = NULL;
+		rb_exc_raise(exception);
+	} else if (result==FAILURE) {
+		rb_raise(rb_ePHPError, "raise exception: %s", mptr->common.function_name);
 	}
 
 	return zval_to_value(z_val);
@@ -448,14 +451,12 @@ VALUE call_php_method_name_bridge(zend_class_entry *ce, zval *obj, VALUE callee,
 		int result = call_php_method(ce, obj, mptr, argc, argv, &z_val TSRMLS_CC);
 
 		// exception
-		if (result==FAILURE) {
-			if (EG(exception)) {
-				VALUE exception = zval_to_value(EG(exception));
-				EG(exception) = NULL;
-				rb_exc_raise(exception);
-			} else {
-				rb_raise(rb_ePHPError, "raise exception: %s", RSTRING_PTR(callee));
-			}
+		if (global_exception) {
+			VALUE exception = zval_to_value(global_exception);
+			global_exception = NULL;
+			rb_exc_raise(exception);
+		} else if (result==FAILURE) {
+			rb_raise(rb_ePHPError, "raise exception: %s", RSTRING_PTR(callee));
 		}
 	} else {
 		// accessor
