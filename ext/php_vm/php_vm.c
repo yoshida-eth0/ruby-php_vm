@@ -1341,7 +1341,7 @@ void Init_php_vm()
 	rb_define_singleton_method(rb_mPHPVM, "get_class", rb_php_vm_get_class, 1);
 	rb_define_singleton_method(rb_mPHPVM, "define_global", rb_php_vm_define_global, 0);
 
-	rb_define_const(rb_mPHPVM, "VERSION", rb_str_new2("1.3.7"));
+	rb_define_const(rb_mPHPVM, "VERSION", rb_str_new2("1.3.8"));
 
 	rb_cv_set(rb_mPHPVM, "@@output_handler", Qnil);
 	rb_cv_set(rb_mPHPVM, "@@error_handler", Qnil);
