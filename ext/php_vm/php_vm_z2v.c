@@ -160,5 +160,3 @@ VALUE zval_to_value(zval *z)
 	}
 	return Qnil;
 }
-
-

@@ -445,22 +445,13 @@ VALUE call_php_method_name_bridge(zend_class_entry *ce, zval *obj, VALUE callee,
 	find_zend_function(ce, RSTRING_PTR(callee), RSTRING_LEN(callee), &mptr);
 
 	// call
-	zval *z_val;
 	if (mptr) {
 		// call method
-		int result = call_php_method(ce, obj, mptr, argc, argv, &z_val TSRMLS_CC);
-
-		// exception
-		if (global_exception) {
-			VALUE exception = zval_to_value(global_exception);
-			global_exception = NULL;
-			rb_exc_raise(exception);
-		} else if (result==FAILURE) {
-			rb_raise(rb_ePHPError, "raise exception: %s", RSTRING_PTR(callee));
-		}
+		return call_php_method_bridge(ce, obj, mptr, argc, argv);
 	} else {
 		// accessor
 		VALUE is_setter = rb_funcall(callee, rb_intern("end_with?"), 1, rb_str_new2("="));
+		zval *z_val;
 
 		if (is_setter) {
 			// setter
@@ -488,10 +479,11 @@ VALUE call_php_method_name_bridge(zend_class_entry *ce, zval *obj, VALUE callee,
 				// static
 				z_val = zend_read_static_property(ce, RSTRING_PTR(callee), RSTRING_LEN(callee), 0 TSRMLS_CC);
 			}
+			return zval_to_value(z_val);
 		}
 	}
 
-	return zval_to_value(z_val);
+	return Qnil;
 }
 
 void value_copy(VALUE dst, VALUE src)
