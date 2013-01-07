@@ -91,7 +91,7 @@ static VALUE zval_to_value_object(zval *z)
 
 	// object
 	VALUE obj = Qnil;
-	if (is_exception_zval(z)) {
+	if (is_exception_zval(z TSRMLS_CC)) {
 		// exception object
 		zval *z_message = zend_read_property(zend_exception_get_default(TSRMLS_C), z, "message", sizeof("message")-1, 0 TSRMLS_CC);
 		obj = rb_exc_new2(rb_ePHPExceptionObject, Z_STRVAL_P(z_message));

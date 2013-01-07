@@ -27,12 +27,11 @@ typedef struct {
 
 // PHP
 extern void php_eval_string(char *code, int code_len TSRMLS_DC);
-extern void find_zend_class_entry(char *name, int name_len, zend_class_entry ***ce);
+extern void find_zend_class_entry(char *name, int name_len, zend_class_entry ***ce TSRMLS_DC);
 extern int is_exception_zend_class_entry(zend_class_entry *ce TSRMLS_DC);
 extern int is_exception_zval(zval *z TSRMLS_DC);
-extern void find_zend_function(zend_class_entry *ce, char *name, int name_len, zend_function **mptr);
-extern int has_zend_function(zend_class_entry *ce, VALUE method_name);
-extern int new_php_object(zend_class_entry *ce, VALUE v_args, zval *retval);
+extern void find_zend_function(zend_class_entry *ce, char *name, int name_len, zend_function **mptr TSRMLS_DC);
+extern int new_php_object(zend_class_entry *ce, VALUE v_args, zval *retval TSRMLS_DC);
 extern void define_php_properties(VALUE v_obj, zend_class_entry *ce, int is_static);
 extern void define_php_methods(VALUE v_obj, zend_class_entry *ce, int is_static);
 extern void define_php_magic_method(VALUE v_obj, zend_class_entry *ce, zval *zobj);
@@ -54,7 +53,7 @@ extern VALUE rb_php_vm_get_output_handler(VALUE cls);
 extern VALUE rb_php_vm_set_output_handler(VALUE cls, VALUE proc);
 extern VALUE rb_php_vm_get_error_handler(VALUE cls);
 extern VALUE rb_php_vm_set_error_handler(VALUE cls, VALUE proc);
-extern void php_vm_require(char *token, VALUE filepath);
+extern void php_vm_require(char *token, VALUE filepath TSRMLS_DC);
 extern VALUE rb_php_vm_require(VALUE cls, VALUE filepath);
 extern VALUE rb_php_vm_require_once(VALUE cls, VALUE filepath);
 extern VALUE rb_php_vm_include(VALUE cls, VALUE filepath);
@@ -113,7 +112,7 @@ extern VALUE rb_php_error_reporting_file(VALUE self);
 extern VALUE rb_php_error_reporting_line(VALUE self);
 
 // module
-extern void php_vm_module_init();
+extern void php_vm_module_init(TSRMLS_D);
 extern void php_vm_module_exit();
 extern void Init_php_vm();
 

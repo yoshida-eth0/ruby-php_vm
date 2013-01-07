@@ -32,7 +32,7 @@ static int php_embed_output_handler(const char *str, unsigned int str_length TSR
 	return str_length;
 }
 
-static void php_embed_error_handler(char *message)
+static void php_embed_error_handler(char *message TSRMLS_DC)
 {
 	VALUE proc = rb_cv_get(rb_mPHPVM, "@@error_handler");
 	VALUE report = rb_exc_new2(rb_ePHPErrorReporting, message);
@@ -92,7 +92,7 @@ void php_eval_string(char *code, int code_len TSRMLS_DC)
 	}
 }
 
-void find_zend_class_entry(char *name, int name_len, zend_class_entry ***ce)
+void find_zend_class_entry(char *name, int name_len, zend_class_entry ***ce TSRMLS_DC)
 {
 	// lowercase
 	char *lcname = malloc(name_len+1);
@@ -115,7 +115,7 @@ void find_zend_class_entry(char *name, int name_len, zend_class_entry ***ce)
 
 int is_exception_zend_class_entry(zend_class_entry *ce TSRMLS_DC)
 {
-	return instanceof_function(ce, zend_exception_get_default() TSRMLS_CC);
+	return instanceof_function(ce, zend_exception_get_default(TSRMLS_C) TSRMLS_CC);
 }
 
 int is_exception_zval(zval *z TSRMLS_DC)
@@ -123,7 +123,7 @@ int is_exception_zval(zval *z TSRMLS_DC)
 	return is_exception_zend_class_entry(Z_OBJCE_P(z) TSRMLS_CC);
 }
 
-void find_zend_function(zend_class_entry *ce, char *name, int name_len, zend_function **mptr)
+void find_zend_function(zend_class_entry *ce, char *name, int name_len, zend_function **mptr TSRMLS_DC)
 {
 	// function_table
 	HashTable *function_table = NULL;
@@ -152,14 +152,7 @@ void find_zend_function(zend_class_entry *ce, char *name, int name_len, zend_fun
 	free(lcname);
 }
 
-int has_zend_function(zend_class_entry *ce, VALUE method_name)
-{
-	zend_function *mptr;
-	find_zend_function(ce, RSTRING_PTR(method_name), RSTRING_LEN(method_name), &mptr);
-	return mptr!=NULL;
-}
-
-int new_php_object(zend_class_entry *ce, VALUE v_args, zval *retval)
+int new_php_object(zend_class_entry *ce, VALUE v_args, zval *retval TSRMLS_DC)
 {
 	int result = FAILURE;
 
@@ -368,7 +361,7 @@ int call_php_method(zend_class_entry *ce, zval *obj, zend_function *mptr, int ar
 		zend_hash_next_index_insert(Z_ARRVAL_P(z_args), &new_var, sizeof(zval *), NULL);
 	}
 
-	zend_fcall_info_args(&fci, z_args);
+	zend_fcall_info_args(&fci, z_args TSRMLS_CC);
 
 	zend_try {
 		// call method
@@ -424,6 +417,8 @@ VALUE get_callee_name()
 
 VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, zend_function *mptr, int argc, VALUE *argv)
 {
+	TSRMLS_FETCH();
+
 	// call
 	zval *z_val;
 	int result = call_php_method(ce, obj, mptr, argc, argv, &z_val TSRMLS_CC);
@@ -453,7 +448,7 @@ VALUE call_php_method_name_bridge(zend_class_entry *ce, zval *obj, VALUE callee,
 
 	// method
 	zend_function *mptr;
-	find_zend_function(ce, RSTRING_PTR(callee), RSTRING_LEN(callee), &mptr);
+	find_zend_function(ce, RSTRING_PTR(callee), RSTRING_LEN(callee), &mptr TSRMLS_CC);
 
 	// call
 	if (mptr) {
@@ -602,7 +597,7 @@ VALUE rb_php_vm_set_error_handler(VALUE cls, VALUE proc)
 	return Qnil;
 }
 
-void php_vm_require(char *token, VALUE filepath)
+void php_vm_require(char *token, VALUE filepath TSRMLS_DC)
 {
 	StringValue(filepath);
 	filepath = rb_funcall(filepath, rb_intern("gsub"), 2, rb_str_new2("\\"), rb_str_new2("\\\\"));
@@ -613,30 +608,34 @@ void php_vm_require(char *token, VALUE filepath)
 	rb_str_cat(code, RSTRING_PTR(filepath), RSTRING_LEN(filepath));
 	rb_str_cat2(code, "\";");
 
-	php_eval_string(RSTRING_PTR(code), RSTRING_LEN(code));
+	php_eval_string(RSTRING_PTR(code), RSTRING_LEN(code) TSRMLS_CC);
 }
 
 VALUE rb_php_vm_require(VALUE cls, VALUE filepath)
 {
-	php_vm_require("require", filepath);
+	TSRMLS_FETCH();
+	php_vm_require("require", filepath TSRMLS_CC);
 	return Qtrue;
 }
 
 VALUE rb_php_vm_require_once(VALUE cls, VALUE filepath)
 {
-	php_vm_require("require_once", filepath);
+	TSRMLS_FETCH();
+	php_vm_require("require_once", filepath TSRMLS_CC);
 	return Qtrue;
 }
 
 VALUE rb_php_vm_include(VALUE cls, VALUE filepath)
 {
-	php_vm_require("include", filepath);
+	TSRMLS_FETCH();
+	php_vm_require("include", filepath TSRMLS_CC);
 	return Qnil;
 }
 
 VALUE rb_php_vm_include_once(VALUE cls, VALUE filepath)
 {
-	php_vm_require("include_once", filepath);
+	TSRMLS_FETCH();
+	php_vm_require("include_once", filepath TSRMLS_CC);
 	return Qnil;
 }
 
@@ -658,7 +657,7 @@ VALUE define_global_constants()
 
 	// method
 	zend_function *mptr;
-	find_zend_function(NULL, "get_defined_constants", strlen("get_defined_constants"), &mptr);
+	find_zend_function(NULL, "get_defined_constants", strlen("get_defined_constants"), &mptr TSRMLS_CC);
 	if (!mptr) {
 		return Qfalse;
 	}
@@ -712,7 +711,7 @@ VALUE define_global_functions()
 
 	// method
 	zend_function *mptr;
-	find_zend_function(NULL, "get_defined_functions", strlen("get_defined_functions"), &mptr);
+	find_zend_function(NULL, "get_defined_functions", strlen("get_defined_functions"), &mptr TSRMLS_CC);
 	if (!mptr) {
 		return Qfalse;
 	}
@@ -752,7 +751,7 @@ VALUE define_global_classes()
 
 	// method
 	zend_function *mptr;
-	find_zend_function(NULL, "get_declared_classes", strlen("get_declared_classes"), &mptr);
+	find_zend_function(NULL, "get_declared_classes", strlen("get_declared_classes"), &mptr TSRMLS_CC);
 	if (!mptr) {
 		return Qfalse;
 	}
@@ -813,7 +812,8 @@ VALUE rb_php_global_class_call(VALUE self)
 
 static VALUE php_global_require_b_proc(RequireArgs *args)
 {
-	php_vm_require(args->token, args->filepath);
+	TSRMLS_FETCH();
+	php_vm_require(args->token, args->filepath TSRMLS_CC);
 	return Qnil;
 }
 
@@ -915,11 +915,13 @@ VALUE rb_php_class_get(VALUE cls, VALUE v_name)
 
 VALUE rb_php_class_initialize(VALUE self, VALUE v_name)
 {
+	TSRMLS_FETCH();
+
 	rb_iv_set(self, "name", v_name);
 
 	// find zend class
 	zend_class_entry **ce = NULL;
-	find_zend_class_entry(RSTRING_PTR(v_name), RSTRING_LEN(v_name), &ce);
+	find_zend_class_entry(RSTRING_PTR(v_name), RSTRING_LEN(v_name), &ce TSRMLS_CC);
 
 	// class not found
 	if (!ce) {
@@ -948,13 +950,15 @@ VALUE rb_php_class_name(VALUE self)
 
 VALUE rb_php_class_new(int argc, VALUE *argv, VALUE self)
 {
+	TSRMLS_FETCH();
+
 	VALUE args;
 	rb_scan_args(argc, argv, "*", &args);
 
 	// alloc
 	VALUE obj = Qnil;
 	zend_class_entry *ce = get_zend_class_entry(self);
-	if (is_exception_zend_class_entry(ce)) {
+	if (is_exception_zend_class_entry(ce TSRMLS_CC)) {
 		obj = rb_obj_alloc(rb_ePHPExceptionObject);
 	} else {
 		obj = rb_obj_alloc(rb_cPHPObject);
@@ -1010,6 +1014,8 @@ VALUE rb_php_class_call_method_missing(int argc, VALUE *argv, VALUE self)
 
 VALUE rb_php_object_initialize(VALUE self, VALUE class, VALUE args)
 {
+	TSRMLS_FETCH();
+
 	// set class
 	rb_iv_set(self, "php_class", class);
 
@@ -1017,7 +1023,7 @@ VALUE rb_php_object_initialize(VALUE self, VALUE class, VALUE args)
 	zend_class_entry *ce = get_zend_class_entry(class);
 	zval *z_obj;
 	ALLOC_INIT_ZVAL(z_obj);
-	new_php_object(ce, args, z_obj);
+	new_php_object(ce, args, z_obj TSRMLS_CC);
 	
 	// set resource
 	PHPNativeResource *p = ALLOC(PHPNativeResource);
@@ -1291,9 +1297,8 @@ VALUE rb_php_error_reporting_line(VALUE self)
 
 // module
 
-void php_vm_module_init()
+void php_vm_module_init(TSRMLS_D)
 {
-	TSRMLS_FETCH();
 	int argc = 1;
 	char *argv[2] = {"php_vm", NULL};
 	php_embed_init(argc, argv PTSRMLS_CC);
@@ -1308,11 +1313,13 @@ void php_vm_module_exit()
 
 void Init_php_vm()
 {
+	TSRMLS_FETCH();
+
 	// initialize php_vm
 	php_embed_module.ub_write = php_embed_output_handler;
 	php_embed_module.log_message = php_embed_error_handler;
 
-	php_vm_module_init();
+	php_vm_module_init(TSRMLS_C);
 	atexit(php_vm_module_exit);
 
 	zend_throw_exception_hook = php_vm_exception_hook;
