@@ -77,9 +77,10 @@ void php_eval_string(char *code, int code_len TSRMLS_DC)
 	}
 
 	// exception
-	if (EG(exception)) {
-		VALUE exception = zval_to_value(EG(exception));
-		EG(exception) = NULL;
+	if (g_exception) {
+		VALUE exception = zval_to_value(g_exception);
+		zval_ptr_dtor(&g_exception);
+		g_exception = NULL;
 		rb_exc_raise(exception);
 	}
 
@@ -174,6 +175,7 @@ int new_php_object(zend_class_entry *ce, VALUE v_args, zval *retval TSRMLS_DC)
 		if (result==FAILURE) {
 			if (g_exception) {
 				VALUE exception = zval_to_value(g_exception);
+				zval_ptr_dtor(&g_exception);
 				g_exception = NULL;
 				rb_exc_raise(exception);
 			} else {
@@ -426,6 +428,7 @@ VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, zend_function *mpt
 		zval_ptr_dtor(&z_val);
 		if (g_exception) {
 			VALUE exception = zval_to_value(g_exception);
+			zval_ptr_dtor(&g_exception);
 			g_exception = NULL;
 			rb_exc_raise(exception);
 		} else {
@@ -668,7 +671,10 @@ VALUE define_global_constants()
 	int result = call_php_method(NULL, NULL, mptr, 0, NULL, &z_val TSRMLS_CC);
 	if (result==FAILURE) {
 		zval_ptr_dtor(&z_val);
-		g_exception = NULL;
+		if (g_exception) {
+			zval_ptr_dtor(&g_exception);
+			g_exception = NULL;
+		}
 		return Qfalse;
 	}
 
@@ -724,7 +730,10 @@ VALUE define_global_functions()
 	int result = call_php_method(NULL, NULL, mptr, 0, NULL, &z_val TSRMLS_CC);
 	if (result==FAILURE) {
 		zval_ptr_dtor(&z_val);
-		g_exception = NULL;
+		if (g_exception) {
+			zval_ptr_dtor(&g_exception);
+			g_exception = NULL;
+		}
 		return Qfalse;
 	}
 
@@ -766,7 +775,10 @@ VALUE define_global_classes()
 	int result = call_php_method(NULL, NULL, mptr, 0, NULL, &z_val TSRMLS_CC);
 	if (result==FAILURE) {
 		zval_ptr_dtor(&z_val);
-		g_exception = NULL;
+		if (g_exception) {
+			zval_ptr_dtor(&g_exception);
+			g_exception = NULL;
+		}
 		return Qfalse;
 	}
 
