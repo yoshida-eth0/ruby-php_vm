@@ -168,11 +168,10 @@ int new_php_object(zend_class_entry *ce, VALUE v_args, zval *retval TSRMLS_DC)
 		object_init_ex(retval, ce);
 
 		// call constructor
-		int result = call_php_method(ce, retval, ce->constructor, RARRAY_LEN(v_args), RARRAY_PTR(v_args), &retval TSRMLS_CC);
+		result = call_php_method(ce, retval, ce->constructor, RARRAY_LEN(v_args), RARRAY_PTR(v_args), &retval TSRMLS_CC);
 
 		// exception
 		if (result==FAILURE) {
-			zval_ptr_dtor(&retval);
 			if (g_exception) {
 				VALUE exception = zval_to_value(g_exception);
 				g_exception = NULL;
@@ -181,6 +180,8 @@ int new_php_object(zend_class_entry *ce, VALUE v_args, zval *retval TSRMLS_DC)
 				rb_raise(rb_ePHPError, "Invocation of %s's constructor failed", ce->name);
 			}
 		}
+
+		zval_ptr_dtor(&retval);
 
 	} else if (!RARRAY_LEN(v_args)) {
 		// undefined constructor, hasnt args
@@ -383,9 +384,6 @@ int call_php_method(zend_class_entry *ce, zval *obj, zend_function *mptr, int ar
 	} zend_end_try();
 
 	// release
-	for (i=0; i<fci.param_count; i++) {
-		zval_ptr_dtor(fci.params[i]);
-	}
 	zend_fcall_info_args_clear(&fci, 1);
 	zval_ptr_dtor(&z_args);
 
@@ -435,7 +433,9 @@ VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, zend_function *mpt
 		}
 	}
 
-	return zval_to_value(z_val);
+	VALUE v_retval = zval_to_value(z_val);
+	zval_ptr_dtor(&z_val);
+	return v_retval;
 }
 
 VALUE call_php_method_name_bridge(zend_class_entry *ce, zval *obj, VALUE callee, int argc, VALUE *argv)
