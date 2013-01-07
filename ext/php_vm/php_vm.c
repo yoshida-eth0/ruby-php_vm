@@ -425,7 +425,6 @@ VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, zend_function *mpt
 
 	// exception
 	if (result==FAILURE) {
-		zval_ptr_dtor(&z_val);
 		if (g_exception) {
 			VALUE exception = zval_to_value(g_exception);
 			zval_ptr_dtor(&g_exception);
@@ -670,7 +669,6 @@ VALUE define_global_constants()
 	zval *z_val;
 	int result = call_php_method(NULL, NULL, mptr, 0, NULL, &z_val TSRMLS_CC);
 	if (result==FAILURE) {
-		zval_ptr_dtor(&z_val);
 		if (g_exception) {
 			zval_ptr_dtor(&g_exception);
 			g_exception = NULL;
@@ -729,7 +727,6 @@ VALUE define_global_functions()
 	zval *z_val;
 	int result = call_php_method(NULL, NULL, mptr, 0, NULL, &z_val TSRMLS_CC);
 	if (result==FAILURE) {
-		zval_ptr_dtor(&z_val);
 		if (g_exception) {
 			zval_ptr_dtor(&g_exception);
 			g_exception = NULL;
@@ -774,7 +771,6 @@ VALUE define_global_classes()
 	zval *z_val;
 	int result = call_php_method(NULL, NULL, mptr, 0, NULL, &z_val TSRMLS_CC);
 	if (result==FAILURE) {
-		zval_ptr_dtor(&z_val);
 		if (g_exception) {
 			zval_ptr_dtor(&g_exception);
 			g_exception = NULL;
@@ -1105,6 +1101,13 @@ VALUE rb_php_object_call_magic_clone(VALUE self)
 	Z_SET_REFCOUNT_P(retval, 0);
 	Z_SET_ISREF_P(retval);
 
+	if (g_exception) {
+		VALUE exception = zval_to_value(g_exception);
+		zval_ptr_dtor(&g_exception);
+		g_exception = NULL;
+		rb_exc_raise(exception);
+	}
+
 	return zval_to_value(retval);
 }
 
@@ -1126,6 +1129,14 @@ VALUE rb_php_object_call_magic___get(VALUE self, VALUE name)
 	retval = handler(zobj, member, BP_VAR_IS, NULL TSRMLS_CC);
 
 	zval_ptr_dtor(&member);
+
+	if (g_exception) {
+		VALUE exception = zval_to_value(g_exception);
+		zval_ptr_dtor(&g_exception);
+		g_exception = NULL;
+		rb_exc_raise(exception);
+	}
+
 	return zval_to_value(retval);
 }
 
@@ -1150,6 +1161,14 @@ VALUE rb_php_object_call_magic___set(VALUE self, VALUE name, VALUE arg)
 
 	zval_ptr_dtor(&member);
 	zval_ptr_dtor(&z_arg);
+
+	if (g_exception) {
+		VALUE exception = zval_to_value(g_exception);
+		zval_ptr_dtor(&g_exception);
+		g_exception = NULL;
+		rb_exc_raise(exception);
+	}
+
 	return Qnil;
 }
 
@@ -1170,6 +1189,14 @@ VALUE rb_php_object_call_magic___unset(VALUE self, VALUE name)
 	handler(zobj, member, NULL TSRMLS_CC);
 
 	zval_ptr_dtor(&member);
+
+	if (g_exception) {
+		VALUE exception = zval_to_value(g_exception);
+		zval_ptr_dtor(&g_exception);
+		g_exception = NULL;
+		rb_exc_raise(exception);
+	}
+
 	return Qnil;
 }
 
@@ -1191,6 +1218,14 @@ VALUE rb_php_object_call_magic___isset(VALUE self, VALUE name)
 	has = handler(zobj, member, 0, NULL TSRMLS_CC);
 
 	zval_ptr_dtor(&member);
+
+	if (g_exception) {
+		VALUE exception = zval_to_value(g_exception);
+		zval_ptr_dtor(&g_exception);
+		g_exception = NULL;
+		rb_exc_raise(exception);
+	}
+
 	return has ? Qtrue : Qfalse;
 }
 
