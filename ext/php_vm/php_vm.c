@@ -1297,14 +1297,6 @@ VALUE rb_php_error_reporting_line(VALUE self)
 
 // module
 
-void php_vm_module_init(TSRMLS_D)
-{
-	int argc = 1;
-	char *argv[2] = {"php_vm", NULL};
-	php_embed_init(argc, argv PTSRMLS_CC);
-	EG(bailout) = NULL;
-}
-
 void php_vm_module_exit()
 {
 	TSRMLS_FETCH();
@@ -1313,15 +1305,24 @@ void php_vm_module_exit()
 
 void Init_php_vm()
 {
-	TSRMLS_FETCH();
+#ifdef ZTS
+	void ***tsrm_ls;
+#endif
 
-	// initialize php_vm
+	// set php_embed callback function
 	php_embed_module.ub_write = php_embed_output_handler;
 	php_embed_module.log_message = php_embed_error_handler;
 
-	php_vm_module_init(TSRMLS_C);
+	// initialize php_embed
+	int init_argc = 1;
+	char *init_argv[2] = {"php_vm", NULL};
+	php_embed_init(init_argc, init_argv PTSRMLS_CC);
+	EG(bailout) = NULL;
+
+	// set exit php_vm callback function
 	atexit(php_vm_module_exit);
 
+	// set php_embed hook function
 	zend_throw_exception_hook = php_vm_exception_hook;
 
 	// ini

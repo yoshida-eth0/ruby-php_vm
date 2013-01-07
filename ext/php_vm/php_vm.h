@@ -112,7 +112,6 @@ extern VALUE rb_php_error_reporting_file(VALUE self);
 extern VALUE rb_php_error_reporting_line(VALUE self);
 
 // module
-extern void php_vm_module_init(TSRMLS_D);
 extern void php_vm_module_exit();
 extern void Init_php_vm();
 
