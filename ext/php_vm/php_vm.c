@@ -157,8 +157,6 @@ int new_php_object(zend_class_entry *ce, VALUE v_args, zval *retval TSRMLS_DC)
 	int result = FAILURE;
 
 	if (ce->constructor) {
-		TSRMLS_FETCH();
-
 		// defined constructor
 /*
 		if (!(ce->constructor->common.fn_flags & ZEND_ACC_PUBLIC)) {
@@ -174,6 +172,7 @@ int new_php_object(zend_class_entry *ce, VALUE v_args, zval *retval TSRMLS_DC)
 
 		// exception
 		if (result==FAILURE) {
+			zval_ptr_dtor(&retval);
 			if (g_exception) {
 				VALUE exception = zval_to_value(g_exception);
 				g_exception = NULL;
@@ -388,6 +387,7 @@ int call_php_method(zend_class_entry *ce, zval *obj, zend_function *mptr, int ar
 		zval_ptr_dtor(fci.params[i]);
 	}
 	zend_fcall_info_args_clear(&fci, 1);
+	zval_ptr_dtor(&z_args);
 
 	// result
 	if (g_exception) {
@@ -425,6 +425,7 @@ VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, zend_function *mpt
 
 	// exception
 	if (result==FAILURE) {
+		zval_ptr_dtor(&z_val);
 		if (g_exception) {
 			VALUE exception = zval_to_value(g_exception);
 			g_exception = NULL;
@@ -666,6 +667,7 @@ VALUE define_global_constants()
 	zval *z_val;
 	int result = call_php_method(NULL, NULL, mptr, 0, NULL, &z_val TSRMLS_CC);
 	if (result==FAILURE) {
+		zval_ptr_dtor(&z_val);
 		g_exception = NULL;
 		return Qfalse;
 	}
@@ -702,6 +704,7 @@ VALUE define_global_constants()
 
 		zend_hash_move_forward_ex(ht, &pos);
 	}
+	zval_ptr_dtor(&z_val);
 	return Qtrue;
 }
 
@@ -720,6 +723,7 @@ VALUE define_global_functions()
 	zval *z_val;
 	int result = call_php_method(NULL, NULL, mptr, 0, NULL, &z_val TSRMLS_CC);
 	if (result==FAILURE) {
+		zval_ptr_dtor(&z_val);
 		g_exception = NULL;
 		return Qfalse;
 	}
@@ -742,6 +746,7 @@ VALUE define_global_functions()
 
 		zend_hash_move_forward_ex(ht, &pos);
 	}
+	zval_ptr_dtor(&z_val);
 	return Qtrue;
 }
 
@@ -760,6 +765,7 @@ VALUE define_global_classes()
 	zval *z_val;
 	int result = call_php_method(NULL, NULL, mptr, 0, NULL, &z_val TSRMLS_CC);
 	if (result==FAILURE) {
+		zval_ptr_dtor(&z_val);
 		g_exception = NULL;
 		return Qfalse;
 	}
@@ -784,6 +790,7 @@ VALUE define_global_classes()
 		}
 		zend_hash_move_forward_ex(ht, &pos);
 	}
+	zval_ptr_dtor(&z_val);
 	return Qtrue;
 }
 
