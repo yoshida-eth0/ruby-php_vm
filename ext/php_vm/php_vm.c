@@ -822,7 +822,7 @@ VALUE rb_php_vm_define_global(VALUE cls)
 	VALUE res1 = define_global_constants();
 	VALUE res2 = define_global_functions();
 	VALUE res3 = define_global_classes();
-	return res1==Qtrue && res2==Qtrue && res3==Qtrue;
+	return (res1==Qtrue && res2==Qtrue && res3==Qtrue) ? Qtrue : Qfalse;
 }
 
 
