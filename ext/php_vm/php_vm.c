@@ -60,13 +60,14 @@ static void php_vm_exception_hook(zval *ex TSRMLS_DC)
 
 // PHP
 
-void php_eval_string(char *code, int code_len TSRMLS_DC)
+VALUE php_eval_string(char *code, int code_len, int use_retval TSRMLS_DC)
 {
 	int syntax_error = 0;
+	zval retval;
 
 	// eval
 	zend_try {
-		if (zend_eval_stringl(code, code_len, NULL, "php_vm" TSRMLS_CC)==FAILURE) {
+		if (zend_eval_stringl(code, code_len, (use_retval ? &retval : NULL), "php_vm" TSRMLS_CC)==FAILURE) {
 			syntax_error = 1;
 		}
 	} zend_end_try();
@@ -91,6 +92,12 @@ void php_eval_string(char *code, int code_len TSRMLS_DC)
 
 		rb_raise(rb_ePHPError, "exit status error: %d", exit_status);
 	}
+
+	// return
+	if (use_retval) {
+		return zval_to_value(&retval);
+	}
+	return Qnil;
 }
 
 void find_zend_class_entry(char *name, int name_len, zend_class_entry ***ce TSRMLS_DC)
@@ -600,7 +607,7 @@ VALUE rb_php_vm_set_error_handler(VALUE cls, VALUE proc)
 	return Qnil;
 }
 
-void php_vm_require(char *token, VALUE filepath TSRMLS_DC)
+VALUE php_vm_require(char *token, VALUE filepath TSRMLS_DC)
 {
 	StringValue(filepath);
 	filepath = rb_funcall(filepath, rb_intern("gsub"), 2, rb_str_new2("\\"), rb_str_new2("\\\\"));
@@ -611,41 +618,49 @@ void php_vm_require(char *token, VALUE filepath TSRMLS_DC)
 	rb_str_cat(code, RSTRING_PTR(filepath), RSTRING_LEN(filepath));
 	rb_str_cat2(code, "\";");
 
-	php_eval_string(RSTRING_PTR(code), RSTRING_LEN(code) TSRMLS_CC);
+	VALUE retval = php_eval_string(RSTRING_PTR(code), RSTRING_LEN(code), 1 TSRMLS_CC);
+	switch (TYPE(retval)) {
+		case T_TRUE:
+		case T_FALSE:
+		case T_NIL:
+			break;
+		default:{
+			retval = rb_funcall(retval, rb_intern("to_i"), 0);
+			retval = rb_funcall(retval, rb_intern(">"), 1, INT2NUM(0));
+			break;
+		}
+	}
+	return retval==Qtrue ? Qtrue : Qfalse;
 }
 
 VALUE rb_php_vm_require(VALUE cls, VALUE filepath)
 {
 	TSRMLS_FETCH();
-	php_vm_require("require", filepath TSRMLS_CC);
-	return Qtrue;
+	return php_vm_require("require", filepath TSRMLS_CC);
 }
 
 VALUE rb_php_vm_require_once(VALUE cls, VALUE filepath)
 {
 	TSRMLS_FETCH();
-	php_vm_require("require_once", filepath TSRMLS_CC);
-	return Qtrue;
+	return php_vm_require("require_once", filepath TSRMLS_CC);
 }
 
 VALUE rb_php_vm_include(VALUE cls, VALUE filepath)
 {
 	TSRMLS_FETCH();
-	php_vm_require("include", filepath TSRMLS_CC);
-	return Qnil;
+	return php_vm_require("include", filepath TSRMLS_CC);
 }
 
 VALUE rb_php_vm_include_once(VALUE cls, VALUE filepath)
 {
 	TSRMLS_FETCH();
-	php_vm_require("include_once", filepath TSRMLS_CC);
-	return Qnil;
+	return php_vm_require("include_once", filepath TSRMLS_CC);
 }
 
 VALUE rb_php_vm_exec(VALUE cls, VALUE code)
 {
 	TSRMLS_FETCH();
-	php_eval_string(RSTRING_PTR(code), RSTRING_LEN(code) TSRMLS_CC);
+	php_eval_string(RSTRING_PTR(code), RSTRING_LEN(code), 0 TSRMLS_CC);
 	return Qnil;
 }
 
@@ -828,35 +843,31 @@ VALUE rb_php_global_class_call(VALUE self)
 static VALUE php_global_require_b_proc(RequireArgs *args)
 {
 	TSRMLS_FETCH();
-	php_vm_require(args->token, args->filepath TSRMLS_CC);
-	return Qnil;
+	return php_vm_require(args->token, args->filepath TSRMLS_CC);
 }
 
 static VALUE php_global_require_r_proc(RequireArgs *args, VALUE e)
 {
-	rb_funcall(Qnil, rb_intern("require"), 1, args->filepath);
-	return Qnil;
+	return rb_funcall(Qnil, rb_intern("require"), 1, args->filepath);
 }
 
-void php_global_require(char *token, VALUE filepath)
+VALUE php_global_require(char *token, VALUE filepath)
 {
 	RequireArgs args;
 	args.token = token;
 	args.filepath = filepath;
 
-	rb_rescue(php_global_require_b_proc, (VALUE)&args, php_global_require_r_proc, (VALUE)&args);
+	return rb_rescue(php_global_require_b_proc, (VALUE)&args, php_global_require_r_proc, (VALUE)&args);
 }
 
 VALUE rb_php_global_require(VALUE cls, VALUE filepath)
 {
-	php_global_require("require", filepath);
-	return Qtrue;
+	return php_global_require("require", filepath);
 }
 
 VALUE rb_php_global_require_once(VALUE cls, VALUE filepath)
 {
-	php_global_require("require_once", filepath);
-	return Qtrue;
+	return php_global_require("require_once", filepath);
 }
 
 VALUE rb_php_global_echo(int argc, VALUE *argv, VALUE cls)
@@ -1304,7 +1315,7 @@ VALUE rb_php_error_reporting_initialize(int argc, VALUE *argv, VALUE self)
 
 	if (argc==1 && TYPE(argv[0])==T_STRING) {
 		log_message = argv[0];
-		VALUE re_str = rb_str_new2("^PHP ([^:]+?)(?: error)?: {0,2}(.+) in (.+) on line (\\d+)$");
+		VALUE re_str = rb_str_new2("^(?:PHP )?([^:]+?)(?: error)?: {0,2}(.+) in (.+) on line (\\d+)$");
 		VALUE re_option = rb_const_get(rb_cRegexp, rb_intern("MULTILINE"));
 		VALUE report_re = rb_funcall(rb_cRegexp, rb_intern("new"), 2, re_str, re_option);
 		VALUE m = rb_funcall(argv[0], rb_intern("match"), 1, report_re);

@@ -26,7 +26,7 @@ typedef struct {
 
 
 // PHP
-extern void php_eval_string(char *code, int code_len TSRMLS_DC);
+extern VALUE php_eval_string(char *code, int code_len, int use_retval TSRMLS_DC);
 extern void find_zend_class_entry(char *name, int name_len, zend_class_entry ***ce TSRMLS_DC);
 extern int is_exception_zend_class_entry(zend_class_entry *ce TSRMLS_DC);
 extern int is_exception_zval(zval *z TSRMLS_DC);
@@ -53,7 +53,7 @@ extern VALUE rb_php_vm_get_output_handler(VALUE cls);
 extern VALUE rb_php_vm_set_output_handler(VALUE cls, VALUE proc);
 extern VALUE rb_php_vm_get_error_handler(VALUE cls);
 extern VALUE rb_php_vm_set_error_handler(VALUE cls, VALUE proc);
-extern void php_vm_require(char *token, VALUE filepath TSRMLS_DC);
+extern VALUE php_vm_require(char *token, VALUE filepath TSRMLS_DC);
 extern VALUE rb_php_vm_require(VALUE cls, VALUE filepath);
 extern VALUE rb_php_vm_require_once(VALUE cls, VALUE filepath);
 extern VALUE rb_php_vm_include(VALUE cls, VALUE filepath);
@@ -68,7 +68,7 @@ extern VALUE rb_php_vm_define_global(VALUE cls);
 // module PHPVM::PHPGlobal
 extern VALUE rb_php_global_function_call(int argc, VALUE *argv, VALUE self);
 extern VALUE rb_php_global_class_call(VALUE self);
-extern void php_global_require(char *token, VALUE filepath);
+extern VALUE php_global_require(char *token, VALUE filepath);
 extern VALUE rb_php_global_require(VALUE cls, VALUE filepath);
 extern VALUE rb_php_global_require_once(VALUE cls, VALUE filepath);
 extern VALUE rb_php_global_echo(int argc, VALUE *argv, VALUE cls);
