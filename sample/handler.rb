@@ -8,12 +8,8 @@ PHPVM.output_handler = Proc.new {|output|
   puts "output: #{output}"
 }
 PHPVM.error_handler = Proc.new {|error_report|
-  if error_report.error_level==:Fatal
-    raise error_report
-  else
-    #puts "error: #{error_report.log_message}"
-    puts "error: #{error_report.error_level}: #{error_report.message} in #{error_report.file} on line #{error_report.line}"
-  end
+  #puts "error: #{error_report.log_message}"
+  puts "error: #{error_report.error_level}: #{error_report.message} in #{error_report.file} on line #{error_report.line}"
 }
 
 begin

@@ -20,6 +20,11 @@ typedef struct {
 } PHPNativeResource;
 
 typedef struct {
+	VALUE proc;
+	VALUE args;
+} HandlerArgs;
+
+typedef struct {
 	char *token;
 	VALUE filepath;
 } RequireArgs;

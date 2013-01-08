@@ -18,14 +18,29 @@ VALUE rb_ePHPErrorReporting;
 
 // PHP Embed
 
+static VALUE php_vm_handler_b_proc(HandlerArgs *args)
+{
+	rb_proc_call(args->proc, args->args);
+	return Qnil;
+}
+
+static VALUE php_vm_handler_r_proc(HandlerArgs *args, VALUE e)
+{
+	fprintf(stderr, "Exception has occurred in php_vm handler. php_vm handler must not occur exception.\n");
+	return Qnil;
+}
+
 static int php_embed_output_handler(const char *str, unsigned int str_length TSRMLS_DC)
 {
 	VALUE proc = rb_cv_get(rb_mPHPVM, "@@output_handler");
 	if (rb_obj_is_kind_of(proc, rb_cProc)) {
 		VALUE args = rb_ary_new();
 		rb_ary_push(args, rb_str_new(str, str_length));
-		rb_proc_call(proc, args);
-		return str_length;
+
+		HandlerArgs handargs;
+		handargs.proc = proc;
+		handargs.args = args;
+		rb_rescue(php_vm_handler_b_proc, (VALUE)&handargs, php_vm_handler_r_proc, (VALUE)&handargs);
 	} else {
 		printf("%s", str);
 	}
@@ -34,18 +49,19 @@ static int php_embed_output_handler(const char *str, unsigned int str_length TSR
 
 static void php_embed_error_handler(char *message TSRMLS_DC)
 {
-	VALUE proc = rb_cv_get(rb_mPHPVM, "@@error_handler");
 	VALUE report = rb_exc_new2(rb_ePHPErrorReporting, message);
+	VALUE proc = rb_cv_get(rb_mPHPVM, "@@error_handler");
 	if (rb_obj_is_kind_of(proc, rb_cProc)) {
 		VALUE args = rb_ary_new();
 		rb_ary_push(args, report);
-		rb_proc_call(proc, args);
-	} else {
-		if (rb_iv_get(report, "error_level")==ID2SYM(rb_intern("Fatal"))) {
-			rb_exc_raise(report);
-		} else {
-			printf("%s\n", message);
-		}
+
+		HandlerArgs handargs;
+		handargs.proc = proc;
+		handargs.args = args;
+		rb_rescue(php_vm_handler_b_proc, (VALUE)&handargs, php_vm_handler_r_proc, (VALUE)&handargs);
+	}
+	if (rb_funcall(report, rb_intern("error_level"), 0)==ID2SYM(rb_intern("Fatal"))) {
+		rb_cv_set(rb_mPHPVM, "@@last_error_reporting", report);
 	}
 }
 
@@ -90,7 +106,13 @@ VALUE php_eval_string(char *code, int code_len, int use_retval TSRMLS_DC)
 		int exit_status = EG(exit_status);
 		EG(exit_status) = 0;
 
-		rb_raise(rb_ePHPError, "exit status error: %d", exit_status);
+		VALUE report = rb_cv_get(rb_mPHPVM, "@@last_error_reporting");
+		rb_cv_set(rb_mPHPVM, "@@last_error_reporting", Qnil);
+		if (report!=Qnil) {
+			rb_exc_raise(report);
+		} else {
+			rb_raise(rb_ePHPError, "exit status error: %d", exit_status);
+		}
 	}
 
 	// return
@@ -180,11 +202,15 @@ int new_php_object(zend_class_entry *ce, VALUE v_args, zval *retval TSRMLS_DC)
 
 		// exception
 		if (result==FAILURE) {
+			VALUE report = rb_cv_get(rb_mPHPVM, "@@last_error_reporting");
+			rb_cv_set(rb_mPHPVM, "@@last_error_reporting", Qnil);
 			if (g_exception) {
 				VALUE exception = zval_to_value(g_exception);
 				zval_ptr_dtor(&g_exception);
 				g_exception = NULL;
 				rb_exc_raise(exception);
+			} else if (report!=Qnil) {
+				rb_exc_raise(report);
 			} else {
 				rb_raise(rb_ePHPError, "Invocation of %s's constructor failed", ce->name);
 			}
@@ -397,7 +423,7 @@ int call_php_method(zend_class_entry *ce, zval *obj, zend_function *mptr, int ar
 	zval_ptr_dtor(&z_args);
 
 	// result
-	if (g_exception) {
+	if (g_exception || rb_cv_get(rb_mPHPVM, "@@last_error_reporting")!=Qnil) {
 		result = FAILURE;
 	}
 	return result;
@@ -432,11 +458,15 @@ VALUE call_php_method_bridge(zend_class_entry *ce, zval *obj, zend_function *mpt
 
 	// exception
 	if (result==FAILURE) {
+		VALUE report = rb_cv_get(rb_mPHPVM, "@@last_error_reporting");
+		rb_cv_set(rb_mPHPVM, "@@last_error_reporting", Qnil);
 		if (g_exception) {
 			VALUE exception = zval_to_value(g_exception);
 			zval_ptr_dtor(&g_exception);
 			g_exception = NULL;
 			rb_exc_raise(exception);
+		} else if (report!=Qnil) {
+			rb_exc_raise(report);
 		} else {
 			rb_raise(rb_ePHPError, "raise exception: %s", mptr->common.function_name);
 		}
@@ -688,6 +718,7 @@ VALUE define_global_constants()
 			zval_ptr_dtor(&g_exception);
 			g_exception = NULL;
 		}
+		rb_cv_set(rb_mPHPVM, "@@last_error_reporting", Qnil);
 		return Qfalse;
 	}
 
@@ -746,6 +777,7 @@ VALUE define_global_functions()
 			zval_ptr_dtor(&g_exception);
 			g_exception = NULL;
 		}
+		rb_cv_set(rb_mPHPVM, "@@last_error_reporting", Qnil);
 		return Qfalse;
 	}
 
@@ -790,6 +822,7 @@ VALUE define_global_classes()
 			zval_ptr_dtor(&g_exception);
 			g_exception = NULL;
 		}
+		rb_cv_set(rb_mPHPVM, "@@last_error_reporting", Qnil);
 		return Qfalse;
 	}
 
@@ -1112,11 +1145,15 @@ VALUE rb_php_object_call_magic_clone(VALUE self)
 	Z_SET_REFCOUNT_P(retval, 0);
 	Z_SET_ISREF_P(retval);
 
+	VALUE report = rb_cv_get(rb_mPHPVM, "@@last_error_reporting");
+	rb_cv_set(rb_mPHPVM, "@@last_error_reporting", Qnil);
 	if (g_exception) {
 		VALUE exception = zval_to_value(g_exception);
 		zval_ptr_dtor(&g_exception);
 		g_exception = NULL;
 		rb_exc_raise(exception);
+	} else if (report!=Qnil) {
+		rb_exc_raise(report);
 	}
 
 	return zval_to_value(retval);
@@ -1141,11 +1178,15 @@ VALUE rb_php_object_call_magic___get(VALUE self, VALUE name)
 
 	zval_ptr_dtor(&member);
 
+	VALUE report = rb_cv_get(rb_mPHPVM, "@@last_error_reporting");
+	rb_cv_set(rb_mPHPVM, "@@last_error_reporting", Qnil);
 	if (g_exception) {
 		VALUE exception = zval_to_value(g_exception);
 		zval_ptr_dtor(&g_exception);
 		g_exception = NULL;
 		rb_exc_raise(exception);
+	} else if (report!=Qnil) {
+		rb_exc_raise(report);
 	}
 
 	return zval_to_value(retval);
@@ -1173,11 +1214,15 @@ VALUE rb_php_object_call_magic___set(VALUE self, VALUE name, VALUE arg)
 	zval_ptr_dtor(&member);
 	zval_ptr_dtor(&z_arg);
 
+	VALUE report = rb_cv_get(rb_mPHPVM, "@@last_error_reporting");
+	rb_cv_set(rb_mPHPVM, "@@last_error_reporting", Qnil);
 	if (g_exception) {
 		VALUE exception = zval_to_value(g_exception);
 		zval_ptr_dtor(&g_exception);
 		g_exception = NULL;
 		rb_exc_raise(exception);
+	} else if (report!=Qnil) {
+		rb_exc_raise(report);
 	}
 
 	return Qnil;
@@ -1201,11 +1246,15 @@ VALUE rb_php_object_call_magic___unset(VALUE self, VALUE name)
 
 	zval_ptr_dtor(&member);
 
+	VALUE report = rb_cv_get(rb_mPHPVM, "@@last_error_reporting");
+	rb_cv_set(rb_mPHPVM, "@@last_error_reporting", Qnil);
 	if (g_exception) {
 		VALUE exception = zval_to_value(g_exception);
 		zval_ptr_dtor(&g_exception);
 		g_exception = NULL;
 		rb_exc_raise(exception);
+	} else if (report!=Qnil) {
+		rb_exc_raise(report);
 	}
 
 	return Qnil;
@@ -1230,11 +1279,15 @@ VALUE rb_php_object_call_magic___isset(VALUE self, VALUE name)
 
 	zval_ptr_dtor(&member);
 
+	VALUE report = rb_cv_get(rb_mPHPVM, "@@last_error_reporting");
+	rb_cv_set(rb_mPHPVM, "@@last_error_reporting", Qnil);
 	if (g_exception) {
 		VALUE exception = zval_to_value(g_exception);
 		zval_ptr_dtor(&g_exception);
 		g_exception = NULL;
 		rb_exc_raise(exception);
+	} else if (report!=Qnil) {
+		rb_exc_raise(report);
 	}
 
 	return has ? Qtrue : Qfalse;
@@ -1392,7 +1445,7 @@ void Init_php_vm()
 
 	// ini
 	zend_try {
-		zend_alter_ini_entry("display_errors", sizeof("display_errors"), "1", sizeof("0")-1, PHP_INI_SYSTEM, PHP_INI_STAGE_RUNTIME);
+		//zend_alter_ini_entry("display_errors", sizeof("display_errors"), "1", sizeof("0")-1, PHP_INI_SYSTEM, PHP_INI_STAGE_RUNTIME);
 		zend_alter_ini_entry("log_errors", sizeof("log_errors"), "1", sizeof("1")-1, PHP_INI_SYSTEM, PHP_INI_STAGE_RUNTIME);
 	} zend_catch {
 	} zend_end_try();
@@ -1418,6 +1471,7 @@ void Init_php_vm()
 
 	rb_cv_set(rb_mPHPVM, "@@output_handler", Qnil);
 	rb_cv_set(rb_mPHPVM, "@@error_handler", Qnil);
+	rb_cv_set(rb_mPHPVM, "@@last_error_reporting", Qnil);
 
 	// module PHPVM::PHPGlobal
 	rb_mPHPGlobal = rb_define_module_under(rb_mPHPVM, "PHPGlobal");

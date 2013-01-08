@@ -13,8 +13,8 @@ class RequireClass
 
     echo "require ruby\n"
     begin
-      require "active_record"
-      echo ActiveRecord
+      require "rubygems"
+      echo Gem
     rescue PHPVM::PHPError, LoadError => e
       echo e.to_s
     end
