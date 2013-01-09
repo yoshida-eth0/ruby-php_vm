@@ -106,6 +106,6 @@ class TC_PHPVM_PHPGlobal < Test::Unit::TestCase
 
   def test_native_constant
     # PHP_VERSION
-    assert_match(/^\d+\.\d+\.\d+$/, PHPVM::PHPGlobal::PHP_VERSION)
+    assert_match(/^\d+\.\d+\.\d+(-dev)?$/, PHPVM::PHPGlobal::PHP_VERSION)
   end
 end
