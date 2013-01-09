@@ -73,6 +73,13 @@ static void php_vm_exception_hook(zval *ex TSRMLS_DC)
 	EG(exception) = NULL;
 }
 
+static void php_vm_reset_status(TSRMLS_D)
+{
+	EG(exit_status) = 0;
+	EG(exception) = NULL;
+	rb_cv_set(rb_mPHPVM, "@@last_error_reporting", Qnil);
+}
+
 
 // PHP
 
@@ -80,6 +87,9 @@ VALUE php_eval_string(char *code, int code_len, int use_retval TSRMLS_DC)
 {
 	int syntax_error = 0;
 	zval retval;
+
+	// reset
+	php_vm_reset_status(TSRMLS_C);
 
 	// eval
 	zend_try {
@@ -362,6 +372,9 @@ void define_php_magic_method(VALUE v_obj, zend_class_entry *ce, zval *zobj)
 int call_php_method(zend_class_entry *ce, zval *obj, zend_function *mptr, int argc, VALUE *v_argv, zval **retval_ptr TSRMLS_DC)
 {
 	int result = FAILURE;
+
+	// reset
+	php_vm_reset_status(TSRMLS_C);
 
 	// call info
 	zend_fcall_info fci;
