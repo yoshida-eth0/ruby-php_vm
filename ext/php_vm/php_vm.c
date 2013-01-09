@@ -97,6 +97,7 @@ VALUE php_eval_string(char *code, int code_len, int use_retval TSRMLS_DC)
 			syntax_error = 1;
 		}
 	} zend_end_try();
+	EG(active_op_array) = NULL;
 
 	// syntax error
 	if (syntax_error) {
@@ -434,6 +435,7 @@ int call_php_method(zend_class_entry *ce, zval *obj, zend_function *mptr, int ar
 	// release
 	zend_fcall_info_args_clear(&fci, 1);
 	zval_ptr_dtor(&z_args);
+	EG(active_op_array) = NULL;
 
 	// result
 	if (g_exception || rb_cv_get(rb_mPHPVM, "@@last_error_reporting")!=Qnil) {
@@ -847,6 +849,7 @@ VALUE define_global_classes()
 	while (SUCCESS == zend_hash_get_current_data_ex(ht, (void **)&z_classname, &pos)) {
 		char *classname = Z_STRVAL_P(*z_classname);
 		int classname_len = Z_STRLEN_P(*z_classname);
+
 		if (0x41<=classname[0] && classname[0]<=0x5a) {
 			// define class as const if class name is uppercase
 			if (!rb_const_defined(rb_mPHPGlobal, rb_intern(classname))) {
@@ -857,6 +860,7 @@ VALUE define_global_classes()
 			// define class as module function if class name is lowercase
 			rb_define_module_function(rb_mPHPGlobal, classname, rb_php_global_class_call, 0);
 		}
+
 		zend_hash_move_forward_ex(ht, &pos);
 	}
 	zval_ptr_dtor(&z_val);

@@ -82,8 +82,15 @@ static VALUE zval_to_value_object(zval *z)
 	const char *name = "";
 	zend_uint name_len = 0;
 	int dup;
+
+	// get class name
 	dup = zend_get_object_classname(z, &name, &name_len TSRMLS_CC);
+	if (dup!=SUCCESS) {
+		rb_raise(rb_ePHPError, "did not get class name from zend_class_entry");
+	}
+
 	VALUE v_name = rb_str_new(name, name_len);
+	efree((char*)name);
 
 	// class
 	VALUE class = rb_php_class_get(rb_cPHPClass, v_name);
